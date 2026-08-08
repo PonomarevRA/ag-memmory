@@ -57,4 +57,23 @@ public sealed class ContractValueTests
         valid.Validate();
         Assert.Throws<ArgumentException>(invalidDimension.Validate);
     }
+
+    [Fact]
+    public void QueryContracts_CarryOptionalBclVectorAndSafeProviderExecutionState()
+    {
+        Assert.Equal(typeof(ReadOnlyMemory<float>?),
+            typeof(MemorySearchRequest).GetProperty(nameof(MemorySearchRequest.QueryVector))!.PropertyType);
+        Assert.Equal(typeof(ReadOnlyMemory<float>?),
+            typeof(MemoryContextRequest).GetProperty(nameof(MemoryContextRequest.QueryVector))!.PropertyType);
+        Assert.Equal(typeof(RetrievalExecution),
+            typeof(MemorySearchResult).GetProperty(nameof(MemorySearchResult.Execution))!.PropertyType);
+
+        var execution = new RetrievalExecution(
+            RetrievalSourceStatus.Completed,
+            RetrievalSourceStatus.Unavailable,
+            RetrievalSourceStatus.NotRequested);
+
+        Assert.Equal(RetrievalSourceStatus.Unavailable, execution.Vector);
+        Assert.Equal(RetrievalSourceStatus.NotRequested, execution.Graph);
+    }
 }
