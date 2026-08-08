@@ -1,0 +1,16 @@
+<section class="empty-state">
+    <span class="empty-state__icon" aria-hidden="true">@Icon</span>
+    <h2>@Title</h2>
+    <p>@Description</p>
+    @if (ChildContent is not null)
+    {
+        <div class="empty-state__action">@ChildContent</div>
+    }
+</section>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "○";
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string Description { get; set; } = string.Empty;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

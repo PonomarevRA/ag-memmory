@@ -8,6 +8,7 @@
     <Project Path="src/AgMemory.Contracts/AgMemory.Contracts.csproj" />
     <Project Path="src/AgMemory.Core/AgMemory.Core.csproj" />
     <Project Path="src/AgMemory.Storage.LanceDb/AgMemory.Storage.LanceDb.csproj" />
+    <Project Path="src/AgMemory.Web/AgMemory.Web.csproj" />
   </Folder>
   <Folder Name="/tests/Compatibility/">
     <Project Path="tests/Compatibility/Agm.Memory.Tests/Agm.Memory.Tests.csproj" />
@@ -17,5 +18,6 @@
     <Project Path="tests/AgMemory.Core.Tests/AgMemory.Core.Tests.csproj" />
     <Project Path="tests/AgMemory.IntegrationTests/AgMemory.IntegrationTests.csproj" />
     <Project Path="tests/AgMemory.Storage.LanceDb.Tests/AgMemory.Storage.LanceDb.Tests.csproj" />
+    <Project Path="tests/AgMemory.Web.Tests/AgMemory.Web.Tests.csproj" />
   </Folder>
 </Solution>

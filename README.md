@@ -26,6 +26,28 @@ dotnet test ag-memory.slnx -c Release
 dotnet pack ag-memory.slnx -c Release --no-build -o artifacts/local-feed
 ```
 
+## Local Web UI
+
+`AgMemory.Web` is a separate Interactive Server host. It provides a Russian-first chat interface,
+a first-party UI-kit, local visit/thread history, and project/agent-connection pages without adding
+web or model-provider dependencies to Contracts or Core.
+
+```bash
+dotnet run --project src/AgMemory.Web/AgMemory.Web.csproj
+```
+
+The host starts with the model gateway disabled and shows an explicit unavailable state. To connect
+an OpenAI-compatible server, set the server-side configuration only (never browser code or a checked-in
+file): `ModelGateway__Mode=OpenAiCompatible`, `ModelGateway__Endpoint`, `ModelGateway__Model`, and
+`ModelGateway__ApiKey`. This starter host permits a configured real model only on a loopback request
+in the Development environment; production enablement requires a separately implemented authenticated
+host. Requests carry antiforgery protection, are limited to 12 per minute per remote address, and send
+an upstream output-token cap. Chat transcripts and navigation remain browser-local; they are not turned
+into durable memories implicitly.
+
+See [`docs/codebase-guide.md`](docs/codebase-guide.md) for feature ownership and
+[`docs/ui-ux-design-brief.md`](docs/ui-ux-design-brief.md) for UI behaviour and privacy boundaries.
+
 The pack produces the synchronized compatibility packages `Agm.Memory.Abstractions`,
 `Agm.Memory` and `Agm.Memory.Sqlite` at version `1.0.0`. Set the standard MSBuild
 property `Version` to issue a coordinated compatibility version, for example:

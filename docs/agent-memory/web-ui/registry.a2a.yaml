@@ -1,0 +1,10 @@
+schema: agent-memory-area-registry/v1
+version: 1
+area: web-ui
+kinds:
+  - kind: decision
+    summary: Proposed UI architecture and data-boundary decisions.
+    path: decision/registry.a2a.yaml
+  - kind: outcome
+    summary: Delivered Web host outcomes and their validation evidence.
+    path: outcome/registry.a2a.yaml

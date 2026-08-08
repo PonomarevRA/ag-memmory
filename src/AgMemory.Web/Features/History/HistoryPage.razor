@@ -1,0 +1,75 @@
+@page "/history"
+@inject BrowserStateInterop BrowserState
+@inject NavigationManager Navigation
+
+<PageTitle>История посещений · AgMemory</PageTitle>
+
+<section class="page-header">
+    <p class="eyebrow">Локальные данные</p>
+    <h1>История посещений</h1>
+    <p>В этой вкладке сохраняются только путь страницы, заголовок и время посещения. Prompt, query, scope и секреты сюда не попадают.</p>
+</section>
+
+@if (_storageUnavailable)
+{
+    <UiStatusBanner Kind="UiStatusKind.Warning" Title="Локальное сохранение недоступно">
+        Уже открытые страницы работают, но новый журнал не будет сохранён после перезагрузки.
+    </UiStatusBanner>
+}
+
+@if (!_loaded)
+{
+    <div class="message-skeleton" aria-label="Загрузка истории"></div>
+}
+else if (_visits.Count == 0)
+{
+    <UiEmptyState Icon="◷" Title="История пока пуста" Description="После перехода по страницам они появятся в этом списке." />
+}
+else
+{
+    <section class="history-page-list" aria-label="Сохранённые посещения">
+        @foreach (var visit in _visits)
+        {
+            <article class="history-page-item" @key="visit.Route">
+                <div>
+                    <h2>@visit.Title</h2>
+                    <p class="muted">@visit.Route · @visit.VisitedAt.LocalDateTime.ToString("g")</p>
+                </div>
+                <div class="button-row">
+                    <button class="ui-button ui-button--secondary" type="button" @onclick="() => Navigation.NavigateTo(visit.Route)">Открыть</button>
+                    <button class="ui-button ui-button--ghost" type="button" @onclick="() => RemoveAsync(visit.Route)">Удалить</button>
+                </div>
+            </article>
+        }
+    </section>
+    <button class="ui-button ui-button--danger" type="button" @onclick="ClearAsync">Очистить историю посещений</button>
+}
+
+@code {
+    private IReadOnlyList<VisitEntry> _visits = [];
+    private bool _loaded;
+    private bool _storageUnavailable;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        _storageUnavailable = !await BrowserState.IsStorageAvailableAsync();
+        _visits = await BrowserState.LoadVisitsAsync();
+        _loaded = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RemoveAsync(string route)
+    {
+        await BrowserState.RemoveVisitAsync(route);
+        _visits = await BrowserState.LoadVisitsAsync();
+    }
+
+    private async Task ClearAsync()
+    {
+        await BrowserState.ClearVisitsAsync();
+        _visits = [];
+    }
+}

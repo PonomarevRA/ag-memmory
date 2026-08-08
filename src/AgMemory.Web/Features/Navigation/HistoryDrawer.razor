@@ -1,0 +1,66 @@
+@inject BrowserStateInterop BrowserState
+@inject NavigationManager Navigation
+
+<button class="ui-icon-button" type="button" aria-expanded="@_isOpen" aria-controls="visit-history-drawer" @onclick="ToggleAsync">
+    <span aria-hidden="true">◷</span><span class="visually-hidden">История посещений</span>
+</button>
+
+@if (_isOpen)
+{
+    <aside class="history-drawer" id="visit-history-drawer" aria-label="История посещений">
+        <div class="drawer-heading">
+            <h2>История посещений</h2>
+            <button class="ui-icon-button" type="button" @onclick="ToggleAsync" aria-label="Закрыть историю">×</button>
+        </div>
+        @if (_visits.Count == 0)
+        {
+            <p class="muted">Здесь появятся посещённые страницы.</p>
+        }
+        else
+        {
+            <ul class="history-list">
+                @foreach (var visit in _visits)
+                {
+                    <li @key="visit.Route">
+                        <button class="history-link" type="button" @onclick="() => Visit(visit.Route)">@visit.Title</button>
+                        <button class="history-remove" type="button" @onclick="() => RemoveAsync(visit.Route)" aria-label="Удалить @visit.Title">×</button>
+                    </li>
+                }
+            </ul>
+        }
+        <div class="drawer-actions">
+            <NavLink class="ui-button ui-button--secondary" href="/history" @onclick="ToggleAsync">Открыть страницу</NavLink>
+            <button class="ui-button ui-button--ghost" type="button" @onclick="ClearAsync">Очистить</button>
+        </div>
+    </aside>
+}
+
+@code {
+    private bool _isOpen;
+    private IReadOnlyList<VisitEntry> _visits = [];
+
+    private async Task ToggleAsync()
+    {
+        _isOpen = !_isOpen;
+        if (_isOpen)
+            _visits = await BrowserState.LoadVisitsAsync();
+    }
+
+    private void Visit(string route)
+    {
+        _isOpen = false;
+        Navigation.NavigateTo(route);
+    }
+
+    private async Task RemoveAsync(string route)
+    {
+        await BrowserState.RemoveVisitAsync(route);
+        _visits = await BrowserState.LoadVisitsAsync();
+    }
+
+    private async Task ClearAsync()
+    {
+        await BrowserState.ClearVisitsAsync();
+        _visits = [];
+    }
+}

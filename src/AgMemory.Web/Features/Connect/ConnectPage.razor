@@ -1,0 +1,63 @@
+@page "/connect"
+
+<PageTitle>Подключить агента · AgMemory</PageTitle>
+
+<section class="page-header">
+    <p class="eyebrow">Интеграция</p>
+    <h1>Подключите агента через серверный host</h1>
+    <p>Агент не получает доступ к storage, модели или ключам напрямую. Server host сопоставляет identity и выдаёт только разрешённый точный scope.</p>
+</section>
+
+<section class="content-grid">
+    <UiCard>
+        <h2>Что сохраняет платформа</h2>
+        <p>Компактные reusable facts, решения, provenance и citations. Raw conversations, полные логи и chain-of-thought не являются memory.</p>
+    </UiCard>
+    <UiCard>
+        <h2>Что нужно заранее</h2>
+        <ol class="numbered-list">
+            <li>Развернуть server-owned AgMemory host.</li>
+            <li>Аутентифицировать агента и сопоставить его с server-side identity.</li>
+            <li>Настроить validator, который выдаёт exact `MemoryScope`.</li>
+            <li>Подключить model gateway на сервере, если нужен чат.</li>
+        </ol>
+    </UiCard>
+</section>
+
+<UiStatusBanner Kind="UiStatusKind.Warning" Title="Статус интеграций">
+    `AgMemory.Client` и `AgMemory.McpServer` пока не входят в solution. Карточки ниже описывают планируемые границы, а не доступные endpoints.
+</UiStatusBanner>
+
+<section class="feature-grid">
+    <UiCard>
+        <p class="eyebrow">Планируется</p>
+        <h2>.NET Client</h2>
+        <p>Тонкий client facade должен обращаться к command/query services без доступа к LanceDB, SQLite и локальным путям.</p>
+        <span class="scope-badge">Недоступно в текущем build</span>
+    </UiCard>
+    <UiCard>
+        <p class="eyebrow">Планируется</p>
+        <h2>MCP</h2>
+        <p>Транспорт должен сохранить те же scope, error, citation и budget semantics, что и .NET facade.</p>
+        <span class="scope-badge">Недоступно в текущем build</span>
+    </UiCard>
+</section>
+
+<section class="documentation-section">
+    <h2>Концептуальный путь</h2>
+    <UiCodeSnippet Code="агент → server host → identity + exact scope validation → command/query facade → AgMemory" />
+    <p class="muted">Это схема, а не копируемая конфигурация. До утверждения P0-01 host не должен угадывать соответствие tenant/project/workspace/chat/run.</p>
+    <div class="button-row">
+        <a class="ui-button ui-button--secondary" href="https://github.com/PonomarevRA/ag-memmory" target="_blank" rel="noreferrer">Репозиторий</a>
+        <NavLink class="ui-button ui-button--ghost" href="/about">О границах проекта</NavLink>
+    </div>
+</section>
+
+<UiStatusBanner Kind="UiStatusKind.Error" Title="Не передавайте секреты агенту или браузеру">
+    API keys модели, database paths, правила авторизации и provider exceptions остаются на сервере. UI не раскрывает их и не пишет в локальную историю.
+</UiStatusBanner>
+
+<UiStatusBanner Kind="UiStatusKind.Warning" Title="Граница starter host">
+    Реальная модель разрешена только для loopback-запроса в Development. Перед production требуется отдельный
+    authenticated host; запросы чата защищены anti-forgery и ограничением частоты.
+</UiStatusBanner>

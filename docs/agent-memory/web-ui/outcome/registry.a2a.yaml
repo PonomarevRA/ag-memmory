@@ -1,0 +1,21 @@
+schema: agent-memory-kind-registry/v1
+version: 1
+area: web-ui
+kind: outcome
+objects:
+  - id: web-ui.outcome.local-chat-host
+    title: Delivered isolated Web host with private history and safe model gateway
+    status: completed
+    summary: Blazor host, UI kit, local history and bounded chat gateway are integrated and validated.
+    path: local-chat-host.a2a.yaml
+    tags: [web-ui, chat, navigation, security]
+    recorded: "2026-08-08"
+    updated: "2026-08-08"
+  - id: web-ui.outcome.small-yuki-loopback
+    title: Connected the local Small Yuki llama-server to the Web chat gateway
+    status: completed
+    summary: The Web host calls the local model through a server-only loopback gateway.
+    path: small-yuki-loopback.a2a.yaml
+    tags: [web-ui, chat, small-yuki, llama-server, local-model]
+    recorded: "2026-08-08"
+    updated: "2026-08-08"

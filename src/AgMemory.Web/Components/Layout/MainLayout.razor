@@ -1,0 +1,39 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <a class="skip-link" href="#main-content">Перейти к содержанию</a>
+    <header class="app-header">
+        <NavLink class="brand" href="/" Match="NavLinkMatch.All" aria-label="AgMemory — на главную">
+            <span class="brand-mark" aria-hidden="true">A</span>
+            <span>AgMemory</span>
+        </NavLink>
+        <nav class="primary-nav" aria-label="Основная навигация">
+            <NavLink href="/chat">Чат</NavLink>
+            <NavLink href="/connect">Подключить агента</NavLink>
+            <NavLink href="/about">О проекте</NavLink>
+            <NavLink href="/ui-kit">UI-kit</NavLink>
+        </nav>
+        <div class="header-actions">
+            <BackButton />
+            <HistoryDrawer />
+            <NavLink class="ui-icon-button" href="/settings" aria-label="Настройки">⚙</NavLink>
+        </div>
+    </header>
+
+    <main id="main-content" class="app-main">
+        @Body
+    </main>
+
+    <footer class="app-footer">
+        <span>AgMemory Web · локальная история остаётся в этом браузере</span>
+        <NavLink href="/history">История посещений</NavLink>
+    </footer>
+</div>
+
+<NavigationTracker />
+
+<div id="blazor-error-ui" data-nosnippet>
+    Соединение с интерфейсом потеряно.
+    <a href="." class="reload">Перезагрузить</a>
+    <span class="dismiss">🗙</span>
+</div>

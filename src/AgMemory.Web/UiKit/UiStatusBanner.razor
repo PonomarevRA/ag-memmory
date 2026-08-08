@@ -1,0 +1,25 @@
+<div class="status-banner status-banner--@Kind.ToString().ToLowerInvariant()" role="@Role">
+    <span class="status-banner__icon" aria-hidden="true">@Icon</span>
+    <div>
+        @if (!string.IsNullOrWhiteSpace(Title))
+        {
+            <strong>@Title</strong>
+        }
+        <div>@ChildContent</div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public UiStatusKind Kind { get; set; } = UiStatusKind.Info;
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string Role => Kind is UiStatusKind.Error or UiStatusKind.Warning ? "alert" : "status";
+    private string Icon => Kind switch
+    {
+        UiStatusKind.Success => "✓",
+        UiStatusKind.Warning => "!",
+        UiStatusKind.Error => "×",
+        _ => "i"
+    };
+}

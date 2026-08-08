@@ -1,0 +1,27 @@
+schema: agent-memory-object/v1
+id: web-ui.decision.local-history-and-gateway
+kind: decision
+area: web-ui
+status: approved
+title: Keep UI history local and route chat through a server gateway
+summary: A future web host keeps local UX state out of memory records and never exposes provider keys.
+recorded: "2026-08-08"
+updated: "2026-08-08"
+tags: [web-ui, privacy, chat, navigation]
+sources:
+  - kind: document
+    ref: docs/ui-ux-design-brief.md
+  - kind: document
+    ref: docs/architecture.md
+  - kind: code
+    ref: src/AgMemory.Contracts/Commands/CommandEnvelope.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/Chat/ChatEndpoint.cs
+payload:
+  problem: The project has no web host or model provider, while contracts prohibit raw conversation retention.
+  decision: Add UI only as a separate host with a server-side model gateway; retain visits and threads browser-locally and save memory only by explicit command.
+  rationale: This preserves Contracts/Core isolation, protects credentials, and distinguishes navigation or chat history from durable memory.
+  consequences:
+    - Client and MCP cards remain unavailable until versioned integrations exist.
+    - Browser data gets clear controls and privacy-safe visit entries.
+    - QA covers back navigation, storage fallback, and no implicit transcript-to-memory write.

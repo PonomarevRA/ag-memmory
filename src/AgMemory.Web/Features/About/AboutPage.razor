@@ -1,0 +1,38 @@
+@page "/about"
+
+<PageTitle>О проекте · AgMemory</PageTitle>
+
+<section class="page-header">
+    <p class="eyebrow">О проекте</p>
+    <h1>AgMemory — самостоятельная memory platform</h1>
+    <p>Проект отделяет contracts и domain use cases от storage, транспортов и источников модели, чтобы агенты получали проверяемый контекст без прямого доступа к базе.</p>
+</section>
+
+<section class="content-grid">
+    <UiCard>
+        <h2>Архитектурная граница</h2>
+        <p>`AgMemory.Contracts` и `AgMemory.Core` остаются provider-neutral. Storage, ASP.NET, SDK модели и AGM находятся во внешних host-границах.</p>
+    </UiCard>
+    <UiCard>
+        <h2>Безопасность контекста</h2>
+        <p>Поиск использует точные авторизованные selectors. Scope не расширяется неявно, а redaction предшествует записи.</p>
+    </UiCard>
+    <UiCard>
+        <h2>Что здесь локально</h2>
+        <p>Навигация, настройки и transcript этого UI — browser-local данные. Их можно удалить на странице истории или в настройках.</p>
+    </UiCard>
+    <UiCard>
+        <h2>Что ещё требует решения</h2>
+        <p>Scope mapping, retention/deletion, embedding policy и реальные Client/MCP integrations не утверждаются этим интерфейсом.</p>
+    </UiCard>
+</section>
+
+<section class="documentation-section">
+    <h2>Принципы интерфейса</h2>
+    <ul class="check-list">
+        <li>Русский-first UI, доступный с клавиатуры и без hover-only действий.</li>
+        <li>Чат работает через same-origin server gateway, а не через ключ в браузере.</li>
+        <li>Недоступная модель или scope denial показываются явно, а не маскируются под пустой результат.</li>
+        <li>История посещений не хранит query, prompt, scope или секреты.</li>
+    </ul>
+</section>

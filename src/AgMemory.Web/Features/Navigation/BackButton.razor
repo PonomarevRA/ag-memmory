@@ -1,0 +1,14 @@
+@inject BrowserStateInterop BrowserState
+@inject NavigationManager Navigation
+
+<button class="ui-button ui-button--ghost" type="button" @onclick="GoBackAsync">
+    <span aria-hidden="true">←</span> Назад
+</button>
+
+@code {
+    private async Task GoBackAsync()
+    {
+        if (!await BrowserState.GoBackAsync())
+            Navigation.NavigateTo("/");
+    }
+}

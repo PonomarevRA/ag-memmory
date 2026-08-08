@@ -1,0 +1,24 @@
+schema: agent-memory-object/v1
+id: web-ui.outcome.local-chat-host
+kind: outcome
+area: web-ui
+status: completed
+title: Delivered isolated Web host with private history and safe model gateway
+summary: Blazor host, UI kit, local history and bounded chat gateway are integrated and validated.
+recorded: "2026-08-08"
+updated: "2026-08-08"
+tags: [web-ui, chat, navigation, security]
+sources:
+  - kind: code
+    ref: src/AgMemory.Web/Features/Chat/ChatEndpoint.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/Navigation/NavigationTracker.razor.js
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/ChatAccessPolicyTests.cs
+  - kind: document
+    ref: docs/performance-baseline.md
+payload:
+  change: Added a separate interactive Web host, UI kit, local visit/thread history, model chat gateway and production-safe access boundary.
+  measurement: 114 VSTest cases pass; five warm suite samples have a 2.04 s median wall time and 182.1 MB median peak RSS.
+  result: Chat keys stay server-side; configured real-model calls are loopback Development only, anti-forgery protected and rate limited.
+  next_action: Add an authenticated production host and browser E2E accessibility/resource coverage before production enablement.

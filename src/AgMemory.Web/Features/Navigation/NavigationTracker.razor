@@ -1,0 +1,57 @@
+@implements IAsyncDisposable
+@inject NavigationManager Navigation
+@inject BrowserStateInterop BrowserState
+
+@code {
+    private bool _interactive;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        _interactive = true;
+        await BrowserState.InitializeAsync(CurrentRoute());
+        await BrowserState.TrackVisitAsync(CurrentRoute(), TitleFor(CurrentRoute()));
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        if (!_interactive)
+            return;
+
+        try
+        {
+            var route = CurrentRoute(args.Location);
+            await BrowserState.TrackVisitAsync(route, TitleFor(route));
+        }
+        catch (JSDisconnectedException)
+        {
+            // Browser navigation can outlive a SignalR circuit.
+        }
+    }
+
+    private string CurrentRoute(string? location = null)
+    {
+        var relative = Navigation.ToBaseRelativePath(location ?? Navigation.Uri);
+        return BrowserStateInterop.SanitizeRoute(relative);
+    }
+
+    private static string TitleFor(string route) => route.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() switch
+    {
+        "chat" => "Чат · AgMemory",
+        "connect" => "Подключить агента · AgMemory",
+        "about" => "О проекте · AgMemory",
+        "history" => "История посещений · AgMemory",
+        "settings" => "Настройки · AgMemory",
+        "ui-kit" => "UI-kit · AgMemory",
+        _ => "AgMemory"
+    };
+
+    public ValueTask DisposeAsync()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        return ValueTask.CompletedTask;
+    }
+}

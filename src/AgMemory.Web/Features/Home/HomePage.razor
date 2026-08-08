@@ -1,0 +1,38 @@
+@page "/"
+
+<PageTitle>AgMemory</PageTitle>
+
+<section class="hero">
+    <p class="eyebrow">Платформа памяти для агентов</p>
+    <h1>Контекст, который остаётся проверяемым.</h1>
+    <p class="hero__lead">AgMemory хранит компактные факты, решения и ссылки на источники. История этого интерфейса остаётся локально в вашем браузере.</p>
+    <div class="button-row">
+        <NavLink class="ui-button" href="/chat">Начать чат</NavLink>
+        <NavLink class="ui-button ui-button--secondary" href="/connect">Подключить агента</NavLink>
+    </div>
+</section>
+
+<section class="feature-grid" aria-label="Возможности">
+    <UiCard>
+        <p class="eyebrow">Чат</p>
+        <h2>Модель через server gateway</h2>
+        <p>Ключи провайдера остаются в конфигурации сервера. Ненастроенный gateway честно показывает недоступность.</p>
+        <NavLink href="/chat">Открыть чат →</NavLink>
+    </UiCard>
+    <UiCard>
+        <p class="eyebrow">Интеграция</p>
+        <h2>Подключение агента</h2>
+        <p>Проверьте prerequisites, авторизацию и точный scope до включения памяти.</p>
+        <NavLink href="/connect">Посмотреть путь подключения →</NavLink>
+    </UiCard>
+    <UiCard>
+        <p class="eyebrow">Прозрачность</p>
+        <h2>История под контролем</h2>
+        <p>Посещения и переписки сохраняются отдельно и могут быть удалены в любой момент.</p>
+        <NavLink href="/history">Открыть историю →</NavLink>
+    </UiCard>
+</section>
+
+<UiStatusBanner Kind="UiStatusKind.Info" Title="О границе данных">
+    AgMemory не записывает raw-переписку или chain-of-thought. Сохранение memory должно быть явным действием через авторизованный серверный путь.
+</UiStatusBanner>

@@ -1,0 +1,13 @@
+schema: agent-memory-kind-registry/v1
+version: 1
+area: web-ui
+kind: decision
+objects:
+  - id: web-ui.decision.local-history-and-gateway
+    title: Keep UI history local and route chat through a server gateway
+    status: approved
+    summary: A future web host keeps local UX state out of memory records and never exposes provider keys.
+    path: local-history-and-gateway.a2a.yaml
+    tags: [web-ui, privacy, chat, navigation]
+    recorded: "2026-08-08"
+    updated: "2026-08-08"
