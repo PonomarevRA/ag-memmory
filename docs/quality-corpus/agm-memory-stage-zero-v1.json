@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "1.0",
+  "corpusVersion": "agm-memory-stage-zero-v1",
+  "fixtureProvenance": {
+    "owner": "phase0_baseline",
+    "sourceRepository": "ai-group-manager",
+    "sourceRevision": "a704d90",
+    "sourceFile": "modules/Agm.Memory/tests/Agm.Memory.Tests/MemoryStageZeroTests.cs",
+    "derivation": "Exact semantic projection of GoldenCorpusFixture.V1; no production SQLite data, user content, credentials, or identifiers were copied.",
+    "dataClassification": "synthetic-test-fixture",
+    "anonymization": "The source fixture already contains non-personal placeholder IDs and generic query text. Scope IDs remain fixed synthetic values solely to preserve fixture determinism."
+  },
+  "queries": [
+    {
+      "queryId": "exact-id",
+      "scope": {
+        "tenantId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "projectId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      },
+      "query": "Golden query exact-id",
+      "slice": "ExactIdentifier",
+      "relevantMemoryIds": ["memory-exact"],
+      "expectedSourceIds": ["source-exact"],
+      "requiresEvidence": true
+    },
+    {
+      "queryId": "semantic",
+      "scope": {
+        "tenantId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "projectId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      },
+      "query": "Golden query semantic",
+      "slice": "SemanticParaphrase",
+      "relevantMemoryIds": ["memory-semantic"],
+      "expectedSourceIds": ["source-semantic"],
+      "requiresEvidence": true
+    },
+    {
+      "queryId": "follow-up",
+      "scope": {
+        "tenantId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "projectId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      },
+      "query": "Golden query follow-up",
+      "slice": "ShortFollowUp",
+      "relevantMemoryIds": ["memory-follow-up"],
+      "expectedSourceIds": ["source-follow-up"],
+      "requiresEvidence": true
+    },
+    {
+      "queryId": "freshness",
+      "scope": {
+        "tenantId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "projectId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      },
+      "query": "Golden query freshness",
+      "slice": "Freshness",
+      "relevantMemoryIds": ["memory-active"],
+      "expectedSourceIds": ["source-active"],
+      "requiresEvidence": true
+    },
+    {
+      "queryId": "history",
+      "scope": {
+        "tenantId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "projectId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      },
+      "query": "Golden query history",
+      "slice": "History",
+      "relevantMemoryIds": ["memory-history"],
+      "expectedSourceIds": ["source-history"],
+      "requiresEvidence": true
+    },
+    {
+      "queryId": "conflict",
+      "scope": {
+        "tenantId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "projectId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+      },
+      "query": "Golden query conflict",
+      "slice": "Conflict",
+      "relevantMemoryIds": ["memory-conflict"],
+      "expectedSourceIds": ["source-conflict"],
+      "requiresEvidence": true
+    }
+  ]
+}

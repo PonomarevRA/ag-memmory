@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup>
+    <!-- Compatibility packages retain the published AGM identities during Phase 1. -->
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <Authors>AI Group Manager contributors</Authors>
+    <RepositoryUrl>https://github.com/PonomarevRA/ag-memmory</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/PonomarevRA/ag-memmory</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>agm;memory;dotnet;compatibility</PackageTags>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <Deterministic>true</Deterministic>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest</AnalysisLevel>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+</Project>

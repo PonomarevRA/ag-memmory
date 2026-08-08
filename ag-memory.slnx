@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/src/Compatibility/">
+    <Project Path="src/Compatibility/Agm.Memory.Abstractions/Agm.Memory.Abstractions.csproj" />
+    <Project Path="src/Compatibility/Agm.Memory/Agm.Memory.csproj" />
+    <Project Path="src/Compatibility/Agm.Memory.Sqlite/Agm.Memory.Sqlite.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/AgMemory.Contracts/AgMemory.Contracts.csproj" />
+    <Project Path="src/AgMemory.Core/AgMemory.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/Compatibility/">
+    <Project Path="tests/Compatibility/Agm.Memory.Tests/Agm.Memory.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AgMemory.Contracts.Tests/AgMemory.Contracts.Tests.csproj" />
+    <Project Path="tests/AgMemory.Core.Tests/AgMemory.Core.Tests.csproj" />
+    <Project Path="tests/AgMemory.IntegrationTests/AgMemory.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

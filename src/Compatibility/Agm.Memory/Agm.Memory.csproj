@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Agm.Memory</RootNamespace>
+    <Description>Local extraction, consolidation, and redaction services for AGM memory.</Description>
+    <PackageTags>$(PackageTags);dependency-injection;redaction</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agm.Memory.Abstractions/Agm.Memory.Abstractions.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

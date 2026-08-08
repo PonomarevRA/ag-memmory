@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>Agm.Memory.Sqlite</RootNamespace>
+    <Description>SQLite persistence and dependency-injection integration for AGM memory.</Description>
+    <PackageTags>$(PackageTags);sqlite;dependency-injection</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agm.Memory.Abstractions/Agm.Memory.Abstractions.csproj" />
+    <ProjectReference Include="../Agm.Memory/Agm.Memory.csproj" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

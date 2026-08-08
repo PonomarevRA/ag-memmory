@@ -1,0 +1,15 @@
+# Сводка реализации Memory Platform
+
+> Обновляется после завершения каждой фазы. Подробности и внешние блокеры — в [реестре проблем](memory-migration-problems.md).
+
+| Фаза | Статус | Готовый результат | Что остаётся |
+| --- | --- | --- | --- |
+| 1. AGM analysis | Локально завершена | Документировано фактическое AGM поведение и добавлен безопасный versioned synthetic corpus. | Production snapshot/real query baseline только после data approval. |
+| 2. Domain | Локально завершена | Contracts/Core с typed commands, exact scope, redaction/idempotency, RRF и budgeted context; 16 новых tests. | Provider port firewall остаётся отдельной Phase 3 задачей. |
+| 3. Storage abstraction | Локально завершена | Scope-safe ports, batch primitive и firewall tests; 74 solution tests проходят. | Adapter должен реализовать эти ports без provider leakage. |
+| 4. LanceDB | Spike завершён | macOS arm64 доказал local CRUD, filter, vector search и reopen на LanceDB 2.5.0. | Production adapter и Linux/FTS/concurrency/index/schema tests. |
+| 5–12 | Запланированы | Задачи распределены на [доске](memory/task-board.md). | Реализация после domain/adapter boundary. |
+
+## Человеческий итог на текущий момент
+
+Работа идёт в отдельном `ag-memmory` workspace и не меняет AGM. Compatibility с legacy AGM больше не является обязательной: новая платформа будет подключаться как модуль после controlled rollout, а existing AGM data можно удалить решением владельца. Реальные rollout, import и delete всё ещё требуют безопасных preconditions; локальная реализация не объявляет их выполненными заранее.

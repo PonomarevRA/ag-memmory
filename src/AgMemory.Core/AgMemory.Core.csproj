@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>AgMemory.Core</RootNamespace>
+    <Description>Provider-neutral command, retrieval, and context use cases for AgMemory.</Description>
+    <PackageTags>$(PackageTags);core;provider-neutral</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AgMemory.Contracts/AgMemory.Contracts.csproj" />
+  </ItemGroup>
+</Project>

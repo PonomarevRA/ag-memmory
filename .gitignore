@@ -5,7 +5,7 @@
 ## https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 ## has more thorough IDE-specific entries.
 ##
-## Get latest from https://github.com/github/gitignore/blob/main/Dotnet.gitignore
+## Get latest from https://github.com/github/gitignore
 
 # Build results
 [Dd]ebug/
@@ -33,7 +33,6 @@ ScaffoldingReadMe.txt
 
 # NuGet Packages
 *.nupkg
-# NuGet Symbol Packages
 *.snupkg
 
 # dotenv environment variables file
@@ -43,15 +42,17 @@ ScaffoldingReadMe.txt
 ~$*
 *~
 CodeCoverage/
+.DS_Store
+.idea/
+.vs/
+TestResults/
 
 # MSBuild Binary and Structured Log
 *.binlog
 
-# MSTest test Results
+# Test results
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
-
-# NUnit
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
