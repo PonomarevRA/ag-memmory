@@ -139,3 +139,13 @@ p { margin-bottom: var(--space-4); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
 @media (max-width: 52rem) { .app-header { grid-template-columns: auto 1fr; gap: var(--space-2); }.primary-nav { grid-row: 2; grid-column: 1 / -1; overflow-x: auto; }.header-actions { justify-self: end; }.app-main { padding-top: var(--space-6); }.feature-grid, .content-grid, .component-grid { grid-template-columns: 1fr; }.page-header--chat, .history-page-item, .settings-row { align-items: flex-start; flex-direction: column; }.chat-layout { grid-template-columns: 1fr; }.thread-rail { display: none; }.chat-panel { min-height: 32rem; }.message-list { max-height: 28rem; }.app-footer { flex-direction: column; }.history-drawer { top: 7.5rem; } }
 @media (max-width: 28rem) { .app-header { padding-inline: var(--space-2); }.app-main { width: min(100% - 1rem, 75rem); }.primary-nav a { padding-inline: var(--space-2); font-size: 0.8125rem; }.header-actions .ui-button--ghost { display: none; }.message { max-width: 96%; }.composer__footer { align-items: flex-end; } }
+
+.memory-graph-page { max-width: 70rem; }
+.memory-graph-card { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); box-shadow: var(--shadow); }
+.memory-graph-toolbar { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; padding: var(--space-3); border-bottom: 1px solid var(--border); }
+.memory-graph-canvas { display: block; width: 100%; height: clamp(22rem, 52vw, 38rem); background: var(--surface-raised); }
+.memory-graph-summary { margin-top: var(--space-5); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); }
+.memory-graph-summary h2, .memory-graph-summary h3 { margin-bottom: var(--space-2); }
+.memory-graph-summary__nodes, .memory-graph-summary__edges { display: grid; gap: var(--space-2); max-height: 22rem; margin: 0; padding-left: 1.25rem; overflow: auto; }
+.memory-graph-summary__edges { margin-top: var(--space-3); }
+@media (max-width: 36rem) { .memory-graph-toolbar .ui-button { flex: 1 1 9rem; }.memory-graph-canvas { height: 20rem; } }

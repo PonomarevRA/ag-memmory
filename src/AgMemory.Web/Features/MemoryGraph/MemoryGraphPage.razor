@@ -1,0 +1,135 @@
+@page "/memory-graph"
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<PageTitle>Граф памяти · AgMemory</PageTitle>
+
+<section class="memory-graph-page">
+    <header class="page-header">
+        <p class="eyebrow">Локальная диагностика</p>
+        <h1>Граф памяти</h1>
+        <p>Визуализация показывает только типы и агрегированные связи между memory. Текст memory, сущности, scope и постоянные идентификаторы не отправляются в браузер.</p>
+    </header>
+
+    @if (_loading)
+    {
+        <UiStatusBanner Kind="UiStatusKind.Info" Title="Загрузка графа">
+            Запрашивается ограниченный локальный снимок.
+        </UiStatusBanner>
+    }
+    else if (!IsAvailable)
+    {
+        <UiStatusBanner Kind="UiStatusKind.Warning" Title="Граф памяти недоступен">
+            Визуализация доступна только из loopback в Development при явно настроенном локальном scope.
+        </UiStatusBanner>
+    }
+    else if (_graph!.Nodes.Count == 0)
+    {
+        <UiStatusBanner Kind="UiStatusKind.Info" Title="Нет подходящих memory">
+            Для настроенного scope не найдено active и неистекших записей.
+        </UiStatusBanner>
+    }
+    else
+    {
+        <section class="memory-graph-card" aria-label="Интерактивный граф памяти">
+            <div class="memory-graph-toolbar" aria-label="Управление масштабом графа">
+                <button class="ui-button ui-button--secondary" type="button" @onclick="ZoomInAsync">Увеличить</button>
+                <button class="ui-button ui-button--secondary" type="button" @onclick="ZoomOutAsync">Уменьшить</button>
+                <button class="ui-button ui-button--ghost" type="button" @onclick="ResetAsync">Сбросить вид</button>
+                <button class="ui-button ui-button--ghost" type="button" @onclick="LoadAsync">Обновить</button>
+            </div>
+            <canvas @ref="_canvas" class="memory-graph-canvas" tabindex="0" role="img" aria-label="Граф memory с локальными узлами и связями" aria-describedby="memory-graph-summary">
+                Ваш браузер не поддерживает canvas. Текстовое описание графа находится ниже.
+            </canvas>
+        </section>
+
+        <section id="memory-graph-summary" class="memory-graph-summary" aria-live="polite">
+            <h2>Текстовое описание</h2>
+            <p>Узлов: @_graph.Nodes.Count. Связей: @_graph.Edges.Count. Связь <code>SharedEntity</code> означает совпадение нормализованной сущности; её имя не показывается.</p>
+            <ul class="memory-graph-summary__nodes">
+                @foreach (var node in _graph.Nodes)
+                {
+                    <li @key="node.Id"><strong>@node.Label</strong> · @node.Type · степень @node.Degree · важность @node.ImportanceBand/5 · уверенность @node.ConfidenceBand/5</li>
+                }
+            </ul>
+            @if (_graph.Edges.Count > 0)
+            {
+                <h3>Агрегированные связи</h3>
+                <ul class="memory-graph-summary__edges">
+                    @foreach (var edge in _graph.Edges)
+                    {
+                        <li @key="EdgeKey(edge)">@LabelFor(edge.SourceId) — @LabelFor(edge.TargetId) · @edge.Kind · вес @edge.Weight</li>
+                    }
+                </ul>
+            }
+        </section>
+    }
+</section>
+
+@code {
+    private ElementReference _canvas;
+    private MemoryGraphInterop? _interop;
+    private MemoryGraphApiResponse? _graph;
+    private bool _loading = true;
+    private bool _canvasInitialized;
+
+    private bool IsAvailable => string.Equals(_graph?.Status, "available", StringComparison.Ordinal);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _interop = new(JS);
+            await LoadAsync();
+            return;
+        }
+
+        if (IsAvailable && !_canvasInitialized && _interop is not null)
+        {
+            await _interop.InitializeAsync(_canvas);
+            _canvasInitialized = true;
+            await _interop.RenderAsync(_graph!);
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_interop is null)
+            return;
+
+        _canvasInitialized = false;
+        _loading = true;
+        await InvokeAsync(StateHasChanged);
+        _graph = await _interop.LoadAsync();
+        _loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ZoomInAsync()
+    {
+        if (_interop is not null)
+            await _interop.ZoomInAsync();
+    }
+
+    private async Task ZoomOutAsync()
+    {
+        if (_interop is not null)
+            await _interop.ZoomOutAsync();
+    }
+
+    private async Task ResetAsync()
+    {
+        if (_interop is not null)
+            await _interop.ResetAsync();
+    }
+
+    private string LabelFor(string id) => _graph?.Nodes.FirstOrDefault(node => node.Id == id)?.Label ?? "Узел";
+
+    private static string EdgeKey(MemoryGraphEdgeDto edge) => $"{edge.SourceId}:{edge.TargetId}";
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_interop is not null)
+            await _interop.DisposeAsync();
+    }
+}

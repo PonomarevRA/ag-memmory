@@ -24,11 +24,27 @@ public sealed partial class LanceDbMemoryStore
         return records.SingleOrDefault(record => record.Id == id);
     }
 
-    private async Task<IReadOnlyList<MemoryRecord>> ReadRecordsAsync(string predicate, CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<MemoryRecord>> ReadRecordsAsync(
+        string predicate,
+        CancellationToken cancellationToken,
+        int? limit = null)
     {
         using var table = await OpenTableAsync(RecordsTable, cancellationToken).ConfigureAwait(false);
-        var batches = await table.Query().Where(predicate).ToArrow().ConfigureAwait(false);
+        var query = table.Query().Where(predicate);
+        if (limit is { } maximum)
+            query = query.Limit(maximum);
+        var batches = await query.ToArrow().ConfigureAwait(false);
         return ReadMemoryRecords(batches).ToArray();
+    }
+
+    private async Task<IReadOnlyList<MemoryGraphSourceRecord>> ReadGraphSourceRecordsAsync(
+        string predicate,
+        CancellationToken cancellationToken,
+        int limit)
+    {
+        using var table = await OpenTableAsync(RecordsTable, cancellationToken).ConfigureAwait(false);
+        var batches = await table.Query().Where(predicate).Limit(limit).ToArrow().ConfigureAwait(false);
+        return ReadMemoryGraphSourceRecords(batches).ToArray();
     }
 
     private async Task<SessionHotMemory?> ReadHotMemoryAsync(

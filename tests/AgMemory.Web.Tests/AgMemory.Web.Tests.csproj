@@ -9,6 +9,7 @@
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/AgMemory.Contracts/AgMemory.Contracts.csproj" />
     <ProjectReference Include="../../src/AgMemory.Web/AgMemory.Web.csproj" />
   </ItemGroup>
 </Project>

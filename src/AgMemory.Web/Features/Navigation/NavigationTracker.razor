@@ -41,6 +41,7 @@
     private static string TitleFor(string route) => route.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() switch
     {
         "chat" => "Чат · AgMemory",
+        "memory-graph" => "Граф памяти · AgMemory",
         "connect" => "Подключить агента · AgMemory",
         "about" => "О проекте · AgMemory",
         "history" => "История посещений · AgMemory",

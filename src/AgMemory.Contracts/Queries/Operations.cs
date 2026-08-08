@@ -11,5 +11,6 @@ public enum MemoryOperation
     Forget,
     Search,
     BuildContext,
-    ReadHotMemory
+    ReadHotMemory,
+    GraphRead
 }

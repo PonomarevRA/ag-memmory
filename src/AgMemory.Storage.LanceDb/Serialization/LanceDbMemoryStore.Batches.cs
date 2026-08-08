@@ -99,6 +99,11 @@ public sealed partial class LanceDbMemoryStore
         for (var index = 0; index < batch.Length; index++) yield return PersistedMemoryRow.Read(batch, index).ToMemoryRecord();
     }
 
+    private static IEnumerable<MemoryGraphSourceRecord> ReadMemoryGraphSourceRecords(RecordBatch batch)
+    {
+        for (var index = 0; index < batch.Length; index++) yield return PersistedMemoryRow.Read(batch, index).ToGraphSourceRecord();
+    }
+
     private static IEnumerable<SessionHotMemory> ReadHotMemoryRows(RecordBatch batch)
     {
         for (var index = 0; index < batch.Length; index++) yield return PersistedHotMemoryRow.Read(batch, index).ToMemory();

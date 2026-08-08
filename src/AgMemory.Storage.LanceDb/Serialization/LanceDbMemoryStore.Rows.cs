@@ -86,6 +86,16 @@ public sealed partial class LanceDbMemoryStore
             return record;
         }
 
+        public MemoryGraphSourceRecord ToGraphSourceRecord() => new(
+            new MemoryId(Required("id")),
+            Scope(Values),
+            ParseEnum<MemoryRecordType>(Required("record_type")),
+            ParseEnum<MemoryLifecycleStatus>(Required("status")),
+            double.Parse(Required("importance"), CultureInfo.InvariantCulture),
+            double.Parse(Required("confidence"), CultureInfo.InvariantCulture),
+            Deserialize<string[]>(Required("entities_json")),
+            Optional("expires_at_utc") is { } expires ? ParseUtc(expires) : null);
+
         private string Required(string key) => Optional(key) ?? throw new InvalidDataException($"Required LanceDB column '{key}' is null.");
         private string? Optional(string key) => Values[key];
     }

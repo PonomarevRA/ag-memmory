@@ -13,7 +13,7 @@ namespace AgMemory.Storage.LanceDb;
 /// Local LanceDB implementation of the provider-neutral durable-memory and search ports.
 /// LanceDB, Arrow schemas and SQL-like predicates are deliberately implementation details.
 /// </summary>
-public sealed partial class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSearch, IAsyncDisposable
+public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSource, IVectorSearch, ILexicalSearch, IAsyncDisposable
 {
     /// <summary>The initial, fail-closed schema policy for tables owned by this adapter.</summary>
     public const string CurrentStorageSchemaVersion = "1.0";

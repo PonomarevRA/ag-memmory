@@ -1,0 +1,25 @@
+schema: agent-memory-object/v1
+id: memory-graph.decision.shared-entity-projection
+kind: decision
+area: memory-graph
+status: approved
+title: Derive visual graph edges from shared normalized entities
+summary: V1 exposes a bounded structural view without claiming unsupported persistent relations.
+recorded: "2026-08-08"
+updated: "2026-08-08"
+tags: [memory-graph, projection, privacy, lancedb]
+sources:
+  - kind: code
+    ref: src/AgMemory.Core/Graph/MemoryGraphQueryService.cs
+  - kind: code
+    ref: src/AgMemory.Storage.LanceDb/Graph/LanceDbMemoryStore.MemoryGraph.cs
+  - kind: test
+    ref: tests/AgMemory.Core.Tests/Graph/MemoryGraphQueryServiceTests.cs
+payload:
+  problem: MemoryRelation has no persisted topology read path, while the Web host needs a safe graph view.
+  decision: Build ephemeral SharedEntity edges from normalized active, non-expired records under exact authorized scope.
+  rationale: Shared entities can be derived from existing LanceDB data without inventing causal relation semantics or a migration.
+  consequences:
+    - Edges express co-occurrence only, never Supports, Contradicts, Supersedes, or Related.
+    - The source and visible graph are hard-bounded to protect the server and browser.
+    - Entity values, record IDs, text, scopes, and provenance remain server-side.

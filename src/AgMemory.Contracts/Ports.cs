@@ -15,6 +15,11 @@ public interface IMemoryQueryService
     Task<SessionHotMemory?> ReadHotMemoryAsync(HotMemoryReadRequest request, CancellationToken cancellationToken);
 }
 
+public interface IMemoryGraphQueryService
+{
+    Task<MemoryGraphSnapshot> ReadAsync(MemoryGraphRequest request, CancellationToken cancellationToken);
+}
+
 public interface IHotMemoryService
 {
     Task<HotMemoryStateResult> UpdateAsync(UpdateHotMemoryStateCommand command, CancellationToken cancellationToken);
@@ -105,6 +110,14 @@ public interface IMemoryStore
     Task<MemoryRecord?> GetAsync(AuthorizedScopeSet scopes, MemoryId id, CancellationToken cancellationToken);
     Task<IReadOnlyList<MemoryRecord>> ListAsync(AuthorizedScopeSet scopes, CancellationToken cancellationToken);
     Task<SessionHotMemory?> GetHotMemoryAsync(AuthorizedScopeSet scopes, MemoryScope exactScope, CancellationToken cancellationToken);
+}
+
+/// <summary>Reads a bounded, exact-scope source set for query-time graph derivation.</summary>
+public interface IMemoryGraphSource
+{
+    Task<IReadOnlyList<MemoryGraphSourceRecord>> ReadAsync(
+        MemoryGraphSourceRequest request,
+        CancellationToken cancellationToken);
 }
 
 public interface IMemoryStoreTransaction : IAsyncDisposable

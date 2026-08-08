@@ -1,0 +1,13 @@
+schema: agent-memory-kind-registry/v1
+version: 1
+area: memory-graph
+kind: outcome
+objects:
+  - id: memory-graph.outcome.local-visualization
+    title: Delivered local memory graph visualization without AGM
+    status: completed
+    summary: A Development loopback endpoint and accessible Web page now render safe bounded graph snapshots.
+    path: local-visualization.a2a.yaml
+    tags: [memory-graph, web-ui, security, testing]
+    recorded: "2026-08-08"
+    updated: "2026-08-08"

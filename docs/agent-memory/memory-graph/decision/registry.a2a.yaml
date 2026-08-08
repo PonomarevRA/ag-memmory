@@ -1,0 +1,13 @@
+schema: agent-memory-kind-registry/v1
+version: 1
+area: memory-graph
+kind: decision
+objects:
+  - id: memory-graph.decision.shared-entity-projection
+    title: Derive visual graph edges from shared normalized entities
+    status: approved
+    summary: V1 exposes a bounded structural view without claiming unsupported persistent relations.
+    path: shared-entity-projection.a2a.yaml
+    tags: [memory-graph, projection, privacy, lancedb]
+    recorded: "2026-08-08"
+    updated: "2026-08-08"

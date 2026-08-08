@@ -1,5 +1,6 @@
 using AgMemory.Web.Components;
 using AgMemory.Web.Features.Chat;
+using AgMemory.Web.Features.MemoryGraph;
 using AgMemory.Web.Features.Navigation;
 using AgMemory.Web.Gateway;
 using System.Threading.RateLimiting;
@@ -29,6 +30,8 @@ builder.Services.AddHttpClient(OpenAiCompatibleChatGateway.HttpClientName, clien
 });
 builder.Services.AddSingleton<IModelChatGateway, OpenAiCompatibleChatGateway>();
 builder.Services.AddScoped<BrowserStateInterop>();
+var memoryGraphOptions = builder.Configuration.GetSection(MemoryGraphHostOptions.SectionName).Get<MemoryGraphHostOptions>() ?? new();
+builder.Services.AddSingleton(new LocalMemoryGraphFeature(memoryGraphOptions, builder.Environment.ContentRootPath));
 
 var app = builder.Build();
 
@@ -46,6 +49,7 @@ app.UseRateLimiter();
 app.MapStaticAssets();
 app.MapPost(ChatEndpoint.Route, ChatEndpoint.HandleAsync)
     .RequireRateLimiting(ChatEndpoint.RateLimitPolicy);
+app.MapGet(MemoryGraphEndpoint.Route, MemoryGraphEndpoint.HandleAsync);
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

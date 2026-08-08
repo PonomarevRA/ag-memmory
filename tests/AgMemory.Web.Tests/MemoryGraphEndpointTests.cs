@@ -1,0 +1,243 @@
+using System.Net;
+using System.Reflection;
+using System.Text.Json;
+using AgMemory.Web.Features.MemoryGraph;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
+using Xunit;
+
+namespace AgMemory.Web.Tests;
+
+public sealed class MemoryGraphEndpointTests
+{
+    [Theory]
+    [InlineData(true, true, "127.0.0.1", true)]
+    [InlineData(true, true, "::1", true)]
+    [InlineData(false, true, "127.0.0.1", false)]
+    [InlineData(true, false, "127.0.0.1", false)]
+    [InlineData(true, true, "203.0.113.15", false)]
+    public void StoreAccess_RequiresEnabledConfigurationDevelopmentAndLoopback(
+        bool isConfigured,
+        bool isDevelopment,
+        string address,
+        bool expected)
+    {
+        var allowed = MemoryGraphAccessPolicy.AllowsStoreAccess(
+            isConfigured,
+            isDevelopment,
+            IPAddress.Parse(address));
+
+        Assert.Equal(expected, allowed);
+    }
+
+    [Fact]
+    public async Task UnconfiguredEndpoint_ReturnsNoStoreUnavailableResponseWithoutCreatingAStore()
+    {
+        var root = TemporaryPath();
+        try
+        {
+            await using var feature = new LocalMemoryGraphFeature(new MemoryGraphHostOptions(), root);
+            var context = Context(IPAddress.Loopback);
+
+            var result = await MemoryGraphEndpoint.HandleAsync(
+                context,
+                new TestHostEnvironment(isDevelopment: true, root),
+                feature,
+                default);
+            var response = await ExecuteAsync(result, context);
+
+            Assert.Equal("no-store", context.Response.Headers.CacheControl.ToString());
+            Assert.Equal("unavailable", response.Status);
+            Assert.Empty(response.Nodes);
+            Assert.Empty(response.Edges);
+            Assert.False(Directory.Exists(root));
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public async Task NonLoopbackOrNonDevelopmentEndpoint_DoesNotInitializeConfiguredStorage()
+    {
+        var root = TemporaryPath();
+        var storagePath = Path.Combine(root, "lancedb");
+        try
+        {
+            await using var feature = ConfiguredFeature(root);
+            var context = Context(IPAddress.Parse("203.0.113.15"));
+
+            var result = await MemoryGraphEndpoint.HandleAsync(
+                context,
+                new TestHostEnvironment(isDevelopment: false, root),
+                feature,
+                default);
+            var response = await ExecuteAsync(result, context);
+
+            Assert.Equal("no-store", context.Response.Headers.CacheControl.ToString());
+            Assert.Equal("unavailable", response.Status);
+            Assert.Empty(response.Nodes);
+            Assert.Empty(response.Edges);
+            Assert.False(Directory.Exists(storagePath));
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public async Task DevelopmentLoopbackEndpoint_ReadsConfiguredGraphAndReturnsSafeDto()
+    {
+        var root = TemporaryPath();
+        var storagePath = Path.Combine(root, "lancedb");
+        try
+        {
+            Directory.CreateDirectory(root);
+            await using var feature = ConfiguredFeature(root);
+            var context = Context(IPAddress.Loopback);
+
+            var result = await MemoryGraphEndpoint.HandleAsync(
+                context,
+                new TestHostEnvironment(isDevelopment: true, root),
+                feature,
+                default);
+            var response = await ExecuteAsync(result, context);
+
+            Assert.Equal("no-store", context.Response.Headers.CacheControl.ToString());
+            Assert.Equal("available", response.Status);
+            Assert.Empty(response.Nodes);
+            Assert.Empty(response.Edges);
+            Assert.True(Directory.Exists(storagePath));
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public async Task ConfiguredFeature_ReadsAnEmptyNewStoreAsAnAvailableEmptySnapshot()
+    {
+        var root = TemporaryPath();
+        try
+        {
+            Directory.CreateDirectory(root);
+            await using var feature = ConfiguredFeature(root);
+
+            var snapshot = await feature.ReadAsync(default);
+
+            Assert.Null(snapshot.Error);
+            Assert.Empty(snapshot.Nodes);
+            Assert.Empty(snapshot.Edges);
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public void BrowserDtos_ExcludeActorScopeRecordAndErrorValues()
+    {
+        var responseProperties = typeof(MemoryGraphApiResponse).GetProperties();
+        var nodeProperties = typeof(MemoryGraphNodeDto).GetProperties();
+        var edgeProperties = typeof(MemoryGraphEdgeDto).GetProperties();
+        var prohibited = new[] { "Actor", "Scope", "MemoryId", "Record", "Canonical", "Entity", "Error", "Provenance" };
+
+        Assert.All(responseProperties.Concat(nodeProperties).Concat(edgeProperties), property =>
+            Assert.DoesNotContain(prohibited, token => property.Name.Contains(token, StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains(nodeProperties, property => property.Name == nameof(MemoryGraphNodeDto.Id) && property.PropertyType == typeof(string));
+        Assert.All(edgeProperties, property => Assert.True(
+            property.PropertyType == typeof(string) || property.PropertyType == typeof(int),
+            $"Unexpected browser DTO field type for {property.Name}."));
+    }
+
+    [Fact]
+    public void Endpoint_AcceptsNoBrowserSuppliedActorOrScope()
+    {
+        var handler = typeof(MemoryGraphEndpoint).GetMethod(nameof(MemoryGraphEndpoint.HandleAsync), BindingFlags.Public | BindingFlags.Static)!;
+        var parameterTypes = handler.GetParameters().Select(parameter => parameter.ParameterType).ToArray();
+
+        Assert.Equal("/api/memory-graph", MemoryGraphEndpoint.Route);
+        Assert.DoesNotContain(parameterTypes, type =>
+            type.Name.Contains("Actor", StringComparison.OrdinalIgnoreCase) ||
+            type.Name.Contains("Scope", StringComparison.OrdinalIgnoreCase) ||
+            type.Name.Contains("MemoryGraphRequest", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Feature_RequiresCompleteServerOwnedConfigurationBeforeItCanBeAvailable()
+    {
+        var root = TemporaryPath();
+        try
+        {
+            await using var incomplete = new LocalMemoryGraphFeature(new MemoryGraphHostOptions
+            {
+                Enabled = true,
+                StoragePath = "lancedb",
+                Scope = new MemoryGraphScopeOptions { TenantId = "local-tenant" }
+            }, root);
+            await using var configured = ConfiguredFeature(root);
+
+            Assert.False(incomplete.IsConfigured);
+            Assert.True(configured.IsConfigured);
+            Assert.False(Directory.Exists(root));
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    private static LocalMemoryGraphFeature ConfiguredFeature(string root) => new(
+        new MemoryGraphHostOptions
+        {
+            Enabled = true,
+            StoragePath = "lancedb",
+            ActorId = "local-graph-actor",
+            Scope = new MemoryGraphScopeOptions
+            {
+                TenantId = "local-tenant",
+                ProjectId = "local-project",
+                WorkspaceId = "local-workspace",
+                ChatId = "local-chat",
+                RunId = "local-run"
+            }
+        },
+        root);
+
+    private static DefaultHttpContext Context(IPAddress address)
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = address;
+        context.Response.Body = new MemoryStream();
+        return context;
+    }
+
+    private static async Task<MemoryGraphApiResponse> ExecuteAsync(IResult result, HttpContext context)
+    {
+        await result.ExecuteAsync(context);
+        context.Response.Body.Position = 0;
+        return (await JsonSerializer.DeserializeAsync<MemoryGraphApiResponse>(
+            context.Response.Body,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)))!;
+    }
+
+    private static string TemporaryPath() => Path.Combine(Path.GetTempPath(), $"agmemory-graph-web-tests-{Guid.NewGuid():N}");
+
+    private static void DeleteTemporaryPath(string path)
+    {
+        if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+    }
+
+    private sealed class TestHostEnvironment(bool isDevelopment, string contentRootPath) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = isDevelopment ? Environments.Development : Environments.Production;
+        public string ApplicationName { get; set; } = "AgMemory.Web.Tests";
+        public string ContentRootPath { get; set; } = contentRootPath;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+}

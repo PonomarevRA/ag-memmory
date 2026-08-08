@@ -108,6 +108,84 @@ public sealed class LanceDbMemoryStoreIntegrationTests
     }
 
     [Fact]
+    public async Task GraphSource_AppliesExactScopeLifecycleAndExpiryBeforeItsBoundedResult()
+    {
+        var path = TemporaryPath();
+        try
+        {
+            await using var store = new LanceDbMemoryStore(new(path));
+            var active = Enumerable.Range(0, MemoryGraphLimits.MaximumSourceRecords + 1)
+                .Select(index => Record($"graph-active-{index:D3}", ScopeA, "graph source", [1f, 0f, 0f]) with
+                {
+                    Embedding = null,
+                    EmbeddingVector = null,
+                    Entities = ["shared-entity"]
+                })
+                .ToArray();
+            var foreign = Record("graph-foreign", ScopeB, "foreign graph source", [1f, 0f, 0f]) with
+            {
+                Importance = 1d,
+                Embedding = null,
+                EmbeddingVector = null
+            };
+            var inactive = Record("graph-inactive", ScopeA, "inactive graph source", [1f, 0f, 0f]) with
+            {
+                Status = MemoryLifecycleStatus.Invalid,
+                Importance = 1d,
+                Embedding = null,
+                EmbeddingVector = null
+            };
+            var expired = Record("graph-expired", ScopeA, "expired graph source", [1f, 0f, 0f]) with
+            {
+                ExpiresAt = Now,
+                Importance = 1d,
+                Embedding = null,
+                EmbeddingVector = null
+            };
+            await WriteAsync(store, Authorized(ScopeA, ScopeB), [.. active, foreign, inactive, expired]);
+
+            var result = await ((IMemoryGraphSource)store).ReadAsync(
+                new(new MemorySearchEligibility(Authorized(ScopeA), null, Now), int.MaxValue),
+                default);
+
+            Assert.Equal(MemoryGraphLimits.MaximumSourceRecords, result.Count);
+            Assert.All(result, record =>
+            {
+                Assert.Equal(ScopeA, record.Scope);
+                Assert.Equal(MemoryLifecycleStatus.Active, record.Status);
+                Assert.True(record.ExpiresAt is null || record.ExpiresAt > Now);
+            });
+            Assert.DoesNotContain(result, record => record.MemoryId == foreign.Id);
+            Assert.DoesNotContain(result, record => record.MemoryId == inactive.Id);
+            Assert.DoesNotContain(result, record => record.MemoryId == expired.Id);
+        }
+        finally
+        {
+            DeleteTemporaryPath(path);
+        }
+    }
+
+    [Fact]
+    public async Task GraphSource_EmptyInitializedStoreReturnsAnEmptySnapshot()
+    {
+        var path = TemporaryPath();
+        try
+        {
+            await using var store = new LanceDbMemoryStore(new(path));
+
+            var result = await ((IMemoryGraphSource)store).ReadAsync(
+                new(new MemorySearchEligibility(Authorized(ScopeA), null, Now), MemoryGraphLimits.MaximumSourceRecords),
+                default);
+
+            Assert.Empty(result);
+        }
+        finally
+        {
+            DeleteTemporaryPath(path);
+        }
+    }
+
+    [Fact]
     public async Task WritesAndDeletes_FailClosedForForeignExactScopeAndStaleVersion()
     {
         var path = TemporaryPath();

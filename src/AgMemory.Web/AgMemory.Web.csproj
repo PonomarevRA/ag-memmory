@@ -9,4 +9,13 @@
     <Description>Interactive server web host for AgMemory.</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- The Web host is the concrete LanceDB composition root; Contracts and Core remain provider-neutral. -->
+    <PackageReference Include="Apache.Arrow" />
+    <PackageReference Include="LanceDB" />
+    <ProjectReference Include="../AgMemory.Contracts/AgMemory.Contracts.csproj" />
+    <ProjectReference Include="../AgMemory.Core/AgMemory.Core.csproj" />
+    <ProjectReference Include="../AgMemory.Storage.LanceDb/AgMemory.Storage.LanceDb.csproj" />
+  </ItemGroup>
+
 </Project>

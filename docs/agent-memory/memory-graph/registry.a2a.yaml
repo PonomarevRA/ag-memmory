@@ -1,0 +1,10 @@
+schema: agent-memory-area-registry/v1
+version: 1
+area: memory-graph
+kinds:
+  - kind: decision
+    summary: Approved semantics and safety boundaries for graph projection.
+    path: decision/registry.a2a.yaml
+  - kind: outcome
+    summary: Delivered graph-visualization capabilities and validation evidence.
+    path: outcome/registry.a2a.yaml

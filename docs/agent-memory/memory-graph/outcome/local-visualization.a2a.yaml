@@ -1,0 +1,22 @@
+schema: agent-memory-object/v1
+id: memory-graph.outcome.local-visualization
+kind: outcome
+area: memory-graph
+status: completed
+title: Delivered local memory graph visualization without AGM
+summary: A Development loopback endpoint and accessible Web page now render safe bounded graph snapshots.
+recorded: "2026-08-08"
+updated: "2026-08-08"
+tags: [memory-graph, web-ui, security, testing]
+sources:
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryGraph/MemoryGraphEndpoint.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/MemoryGraphEndpointTests.cs
+payload:
+  change: Added GraphRead contracts, bounded LanceDB graph source, server-only Development authority, safe endpoint, and local renderer.
+  measurement: The full solution test run completed with 136 passed and no failed or skipped tests.
+  result: The browser receives opaque response-local IDs and aggregate graph metadata only; the graph remains disabled outside configured Development loopback.
+  next_action: Add authenticated identity-to-scope mapping before considering any production graph endpoint.

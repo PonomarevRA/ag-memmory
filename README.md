@@ -45,6 +45,21 @@ host. Requests carry antiforgery protection, are limited to 12 per minute per re
 an upstream output-token cap. Chat transcripts and navigation remain browser-local; they are not turned
 into durable memories implicitly.
 
+### Local Memory Graph
+
+Страница `/memory-graph` — локальная диагностическая визуализация. Настройте её только через
+server-side environment variables или user secrets, не через browser code и не через committed config:
+`MemoryGraph__Enabled`, `MemoryGraph__StoragePath`, `MemoryGraph__ActorId` и обязательный
+`MemoryGraph__Scope__TenantId`. Остальные точные измерения scope — `MemoryGraph__Scope__ProjectId`,
+`MemoryGraph__Scope__WorkspaceId`, `MemoryGraph__Scope__ChatId` и `MemoryGraph__Scope__RunId` — задавайте
+только когда они присутствуют в целевом scope.
+
+Граф доступен только в Development с loopback-запроса; при выключенной, неполной или некорректной
+конфигурации, а также вне loopback/Development, он возвращает безопасное состояние unavailable. Браузер
+не получает записи memory, имена сущностей или scope: только response-local opaque IDs, типы, числовые
+bands/degrees и агрегированные рёбра. `SharedEntity` означает совпадение нормализованной сущности во
+время запроса, а не сохранённый `MemoryRelation`.
+
 See [`docs/codebase-guide.md`](docs/codebase-guide.md) for feature ownership and
 [`docs/ui-ux-design-brief.md`](docs/ui-ux-design-brief.md) for UI behaviour and privacy boundaries.
 

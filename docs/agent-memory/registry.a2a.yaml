@@ -1,6 +1,9 @@
 schema: agent-memory-root-registry/v1
 version: 1
 areas:
+  - id: memory-graph
+    summary: Safe, bounded memory-graph projection and its local Web visualization.
+    path: memory-graph/registry.a2a.yaml
   - id: web-ui
     summary: Web UI, local navigation history, and model-chat gateway boundary.
     path: web-ui/registry.a2a.yaml
