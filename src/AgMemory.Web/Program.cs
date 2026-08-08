@@ -45,6 +45,7 @@ builder.Services.AddSingleton<IModelChatGateway, OpenAiCompatibleChatGateway>();
 builder.Services.AddScoped<BrowserStateInterop>();
 var memoryGraphOptions = builder.Configuration.GetSection(MemoryGraphHostOptions.SectionName).Get<MemoryGraphHostOptions>() ?? new();
 builder.Services.AddSingleton(new LocalMemoryGraphFeature(memoryGraphOptions, applicationDataDirectory));
+builder.Services.AddSingleton(new LocalChatMemoryFeature(memoryGraphOptions, applicationDataDirectory));
 
 var app = builder.Build();
 app.Logger.LogInformation(

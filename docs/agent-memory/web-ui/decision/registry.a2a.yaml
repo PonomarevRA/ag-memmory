@@ -11,3 +11,19 @@ objects:
     tags: [web-ui, privacy, chat, navigation]
     recorded: "2026-08-08"
     updated: "2026-08-08"
+  - id: web-ui.decision.local-chat-memory-bridge
+    title: Recall and persist local chat memory for Yuki in Development
+    status: approved
+    summary: The server records local chat events and supplies bounded lexical context to the loopback model.
+    path: local-chat-memory-bridge.a2a.yaml
+    tags: [web-ui, chat, memory, yuki, development]
+    recorded: "2026-08-08"
+    updated: "2026-08-08"
+  - id: web-ui.decision.local-codex-mcp
+    title: Expose the local AgMemory scope to Codex through stdio MCP
+    status: approved
+    summary: Codex invokes a local stdio MCP host with an environment-fixed store, actor, and exact scope.
+    path: local-codex-mcp.a2a.yaml
+    tags: [web-ui, codex, mcp, memory, development]
+    recorded: "2026-08-09"
+    updated: "2026-08-09"

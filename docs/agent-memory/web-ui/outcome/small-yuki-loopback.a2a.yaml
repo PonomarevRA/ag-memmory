@@ -13,10 +13,12 @@ sources:
     ref: src/AgMemory.Web/Gateway/ModelGatewayOptions.cs
   - kind: code
     ref: src/AgMemory.Web/Gateway/OpenAiCompatibleChatGateway.cs
+  - kind: config
+    ref: src/AgMemory.Web/appsettings.Development.json
   - kind: local-project
     ref: /Users/romanponomarev/Documents/Codex/2026-08-08/rfr/work/small-yuki/scripts/start-llama.sh
 payload:
-  change: Added the server-only ModelGateway DisableThinking option and configured the running Web host for Small Yuki's loopback OpenAI-compatible endpoint.
-  verification: A protected /api/chat request completed with a non-demo text response from model alias small-yuki-local.
+  change: Added the server-only ModelGateway DisableThinking option and made the Development host default to Small Yuki's loopback OpenAI-compatible endpoint.
+  verification: A protected /api/chat request completed with a non-demo text response from model alias small-yuki-local in the self-contained macOS app.
   result: Small Yuki requires chat_template_kwargs.enable_thinking=false for concise visible content; reasoning_content is intentionally neither read nor rendered.
   consequence: Keep DisableThinking opt-in because it is a llama-server/Qwen request extension, not a universal OpenAI-compatible API field.

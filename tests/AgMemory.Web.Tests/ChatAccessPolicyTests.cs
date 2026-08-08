@@ -1,12 +1,29 @@
 using System.Net;
 using AgMemory.Web.Features.Chat;
 using AgMemory.Web.Gateway;
+using Microsoft.Extensions.Configuration;
 using Xunit;
 
 namespace AgMemory.Web.Tests;
 
 public sealed class ChatAccessPolicyTests
 {
+    [Fact]
+    public void DevelopmentSettings_ConfigureTheLocalSmallYukiGateway()
+    {
+        var webAssemblyDirectory = Path.GetDirectoryName(typeof(Program).Assembly.Location)!;
+        var settings = Path.Combine(webAssemblyDirectory, "appsettings.Development.json");
+        var configuration = new ConfigurationBuilder().AddJsonFile(settings, optional: false).Build();
+        var options = configuration.GetSection(ModelGatewayOptions.SectionName).Get<ModelGatewayOptions>();
+
+        Assert.NotNull(options);
+        Assert.Equal("OpenAiCompatible", options.Mode);
+        Assert.Equal("http://127.0.0.1:8081/v1/chat/completions", options.Endpoint);
+        Assert.Equal("small-yuki-local", options.Model);
+        Assert.True(options.DisableThinking);
+        Assert.True(options.HasOpenAiCompatibleSettings);
+    }
+
     [Fact]
     public void Disabled_gateway_does_not_turn_an_unavailable_state_into_an_access_denial()
     {

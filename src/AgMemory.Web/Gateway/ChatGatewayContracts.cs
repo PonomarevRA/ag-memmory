@@ -23,7 +23,7 @@ public sealed record ChatGatewayEvent(
 /// <summary>Browser request containing only an opaque local thread id and current prompt.</summary>
 public sealed record ChatApiRequest(string ThreadId, string Prompt);
 
-public sealed record ChatGatewayRequest(string ThreadId, string Prompt);
+public sealed record ChatGatewayRequest(string ThreadId, string Prompt, string? MemoryContext = null);
 
 public interface IModelChatGateway
 {

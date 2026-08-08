@@ -13,7 +13,7 @@
         <div>
             <p class="eyebrow">Локальный thread</p>
             <h1>Чат с моделью</h1>
-            <p>Переписка хранится только в этом браузере. AgMemory не создаёт memory из сообщений автоматически.</p>
+            <p>История остаётся в этом браузере, а отправленные сообщения и ответы сохраняются в локальную AgMemory для следующих вопросов.</p>
         </div>
         <div class="button-row">
             <button class="ui-button ui-button--secondary" type="button" @onclick="StartNewThread">Новый чат</button>
@@ -57,8 +57,8 @@
     <div class="chat-layout">
         <aside class="thread-rail" aria-label="Управление чатом">
             <p class="scope-badge">Thread · @_activeThread[..8]</p>
-            <p class="muted">Локальная история</p>
-            <p class="small-copy">Отправляется только текущий prompt и непрозрачный идентификатор thread.</p>
+            <p class="muted">Локальная история и память</p>
+            <p class="small-copy">Текущий prompt и ответ сохраняются только в локальную AgMemory этого Development scope.</p>
             <NavLink class="ui-button ui-button--ghost" href="/history">История посещений</NavLink>
         </aside>
 

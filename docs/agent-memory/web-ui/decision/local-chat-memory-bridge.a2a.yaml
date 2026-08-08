@@ -1,0 +1,25 @@
+schema: agent-memory-object/v1
+id: web-ui.decision.local-chat-memory-bridge
+kind: decision
+area: web-ui
+status: approved
+title: Recall and persist local chat memory for Yuki in Development
+summary: The server records local chat events and supplies bounded lexical context to the loopback model.
+recorded: "2026-08-08"
+updated: "2026-08-08"
+tags: [web-ui, chat, memory, yuki, development]
+sources:
+  - kind: code
+    ref: src/AgMemory.Web/Features/Chat/LocalChatMemoryFeature.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/Chat/ChatEndpoint.cs
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/LocalChatMemoryFeatureTests.cs
+payload:
+  problem: Browser-only chat history could not be used for later Yuki questions or inspected on the memory graph.
+  decision: Persist submitted prompts and completed answers as local Event records and inject at most four lexical matches as server-only model context.
+  rationale: It reuses the exact local scope and durable store without exposing scope, record IDs, or memory text to browser APIs.
+  consequences:
+    - Messages are durable local data in Development and appear structurally on the graph through their shared thread entity.
+    - Retrieved notes are explicitly labelled untrusted for the model.
+    - Production still needs identity-to-scope authorization and a redaction policy before this bridge can be enabled.

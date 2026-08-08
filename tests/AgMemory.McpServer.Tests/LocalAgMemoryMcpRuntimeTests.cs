@@ -1,0 +1,35 @@
+using AgMemory.McpServer;
+using Xunit;
+
+namespace AgMemory.McpServer.Tests;
+
+public sealed class LocalAgMemoryMcpRuntimeTests
+{
+    [Fact]
+    public async Task RemembersAndRecallsOnlyItsConfiguredLocalScope()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"agmemory-mcp-{Guid.NewGuid():N}");
+        var configuration = LocalAgMemoryMcpConfiguration.Create(
+            directory, "codex-test", "tenant-test", projectId: "project-test");
+        await using var runtime = new LocalAgMemoryMcpRuntime(configuration);
+
+        var receipt = await runtime.RememberAsync(
+            "The Codex memory test marker is Orion-42.", "Fact", .8d, .9d, ["test-memory"], CancellationToken.None);
+        var hits = await runtime.RecallAsync("Which marker is Orion?", 5, CancellationToken.None);
+        var status = await runtime.GetStatusAsync(CancellationToken.None);
+
+        Assert.Equal("Created", receipt.Outcome);
+        var hit = Assert.Single(hits);
+        Assert.Equal("Fact", hit.Type);
+        Assert.Equal("The Codex memory test marker is Orion-42.", hit.Content);
+        Assert.Equal(1, status.ActiveMemoryCount);
+    }
+
+    [Fact]
+    public void ConfigurationRejectsImplicitIdentityOrScope()
+    {
+        Assert.Throws<InvalidOperationException>(() => LocalAgMemoryMcpConfiguration.Create(null, "actor", "tenant"));
+        Assert.Throws<InvalidOperationException>(() => LocalAgMemoryMcpConfiguration.Create("/tmp/store", null, "tenant"));
+        Assert.Throws<InvalidOperationException>(() => LocalAgMemoryMcpConfiguration.Create("/tmp/store", "actor", null));
+    }
+}

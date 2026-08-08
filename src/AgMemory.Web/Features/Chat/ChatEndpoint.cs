@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text;
 using AgMemory.Web.Gateway;
 using Microsoft.AspNetCore.Antiforgery;
 
@@ -16,6 +17,7 @@ public static class ChatEndpoint
         HttpContext context,
         ChatApiRequest? request,
         IModelChatGateway gateway,
+        LocalChatMemoryFeature memory,
         IHostEnvironment environment,
         IAntiforgery antiforgery,
         CancellationToken cancellationToken)
@@ -48,8 +50,34 @@ public static class ChatEndpoint
             return;
         }
 
-        await foreach (var item in gateway.StreamAsync(new(request!.ThreadId, request.Prompt), cancellationToken))
-            await WriteEventAsync(context, item, cancellationToken);
+        if (!memory.IsConfigured)
+        {
+            await WriteEventAsync(context, new(ChatGatewayEventKind.Error, ErrorCode: ChatGatewayErrorCode.Unavailable), cancellationToken);
+            return;
+        }
+
+        try
+        {
+            await memory.RememberAsync(request!.ThreadId, "user", request.Prompt, cancellationToken).ConfigureAwait(false);
+            var memoryContext = await memory.RecallAsync(request.Prompt, cancellationToken).ConfigureAwait(false);
+            var answer = new StringBuilder();
+            await foreach (var item in gateway.StreamAsync(new(request.ThreadId, request.Prompt, memoryContext), cancellationToken))
+            {
+                if (item.Kind == ChatGatewayEventKind.Text && item.Text is not null) answer.Append(item.Text);
+                await WriteEventAsync(context, item, cancellationToken);
+            }
+
+            if (answer.Length > 0)
+                await memory.RememberAsync(request.ThreadId, "assistant", answer.ToString(), cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            await WriteEventAsync(context, new(ChatGatewayEventKind.Error, ErrorCode: ChatGatewayErrorCode.Unavailable), cancellationToken);
+        }
     }
 
     private static bool IsValid(ChatApiRequest? request) =>

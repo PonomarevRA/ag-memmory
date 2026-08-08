@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>AgMemory.McpServer</RootNamespace>
+    <Description>Local stdio MCP server for AgMemory.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Apache.Arrow" />
+    <PackageReference Include="LanceDB" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="ModelContextProtocol" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AgMemory.Contracts/AgMemory.Contracts.csproj" />
+    <ProjectReference Include="../AgMemory.Core/AgMemory.Core.csproj" />
+    <ProjectReference Include="../AgMemory.Storage.LanceDb/AgMemory.Storage.LanceDb.csproj" />
+  </ItemGroup>
+</Project>

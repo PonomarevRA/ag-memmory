@@ -36,14 +36,26 @@ web or model-provider dependencies to Contracts or Core.
 dotnet run --project src/AgMemory.Web/AgMemory.Web.csproj
 ```
 
-The host starts with the model gateway disabled and shows an explicit unavailable state. To connect
-an OpenAI-compatible server, set the server-side configuration only (never browser code or a checked-in
-file): `ModelGateway__Mode=OpenAiCompatible`, `ModelGateway__Endpoint`, `ModelGateway__Model`, and
-`ModelGateway__ApiKey`. This starter host permits a configured real model only on a loopback request
-in the Development environment; production enablement requires a separately implemented authenticated
-host. Requests carry antiforgery protection, are limited to 12 per minute per remote address, and send
-an upstream output-token cap. Chat transcripts and navigation remain browser-local; they are not turned
-into durable memories implicitly.
+Development defaults to the locally running Small Yuki `llama-server` at
+`http://127.0.0.1:8081/v1/chat/completions` with model alias `small-yuki-local`. It is loopback-only and
+uses a non-secret local marker required by the gateway's OpenAI-compatible validation. To use another
+provider, override the server-side-only settings (never browser code): `ModelGateway__Mode`,
+`ModelGateway__Endpoint`, `ModelGateway__Model`, and `ModelGateway__ApiKey`. A configured real model is
+allowed only from loopback in Development; production enablement requires a separately implemented
+authenticated host. Requests carry antiforgery protection, are limited to 12 per minute per remote
+address, and send an upstream output-token cap. The browser transcript and navigation remain local UI
+state. In Development, the server records each submitted prompt and completed model answer as a local
+AgMemory event in the configured exact scope; later prompts retrieve up to four lexical matches as
+server-only context for Yuki. This is local persistence, not a production identity-to-scope policy.
+
+### Codex ↔ AgMemory
+
+`AgMemory.McpServer` exposes that same local store to Codex over stdio MCP. The registered
+`agmemory-local` integration has only three tools: `memory_recall`, `memory_remember` and
+`memory_status`. Its storage path, actor and exact scope are fixed in the Codex MCP process
+environment — they are not tool inputs. Start a new Codex conversation after registration and ask it
+to use `memory_status`, then `memory_remember` and `memory_recall` to test durable memory. This local
+development bridge must not be used as a production authorization model.
 
 ### Local Memory Graph
 

@@ -14,7 +14,7 @@ objects:
   - id: web-ui.outcome.small-yuki-loopback
     title: Connected the local Small Yuki llama-server to the Web chat gateway
     status: completed
-    summary: The Web host calls the local model through a server-only loopback gateway.
+    summary: Development defaults to the local model through a server-only loopback gateway.
     path: small-yuki-loopback.a2a.yaml
     tags: [web-ui, chat, small-yuki, llama-server, local-model]
     recorded: "2026-08-08"

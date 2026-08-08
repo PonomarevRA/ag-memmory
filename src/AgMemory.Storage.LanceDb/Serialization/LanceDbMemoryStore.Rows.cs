@@ -56,12 +56,14 @@ public sealed partial class LanceDbMemoryStore
 
         public MemoryRecord ToMemoryRecord()
         {
-            var embedding = Optional("embedding_json") is { } embeddingJson
+            var embedding = Optional("embedding_json") is { } embeddingJson && !string.Equals(embeddingJson, "null", StringComparison.OrdinalIgnoreCase)
                 ? PersistedEmbedding.ToModel(Deserialize<PersistedEmbedding>(embeddingJson))
                 : null;
-            var vector = Optional("embedding_vector_json") is { } vectorJson
-                ? Deserialize<float[]>(vectorJson)
-                : Vector;
+            var vector = embedding is null
+                ? null
+                : Optional("embedding_vector_json") is { } vectorJson && !string.Equals(vectorJson, "null", StringComparison.OrdinalIgnoreCase)
+                    ? Deserialize<float[]>(vectorJson)
+                    : Vector;
             var record = new MemoryRecord(
                 new MemoryId(Required("id")),
                 Scope(Values),
@@ -97,7 +99,7 @@ public sealed partial class LanceDbMemoryStore
             Optional("expires_at_utc") is { } expires ? ParseUtc(expires) : null);
 
         private string Required(string key) => Optional(key) ?? throw new InvalidDataException($"Required LanceDB column '{key}' is null.");
-        private string? Optional(string key) => Values[key];
+        private string? Optional(string key) => string.IsNullOrWhiteSpace(Values[key]) ? null : Values[key];
     }
 
     private sealed record PersistedHotMemoryRow(
