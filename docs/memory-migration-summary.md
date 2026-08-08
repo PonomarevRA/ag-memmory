@@ -8,6 +8,7 @@
 | 2. Domain | Локально завершена | Contracts/Core с typed commands, exact scope, redaction/idempotency, RRF и budgeted context; 16 новых tests. | Provider port firewall остаётся отдельной Phase 3 задачей. |
 | 3. Storage abstraction | Локально завершена | Scope-safe ports, batch primitive и firewall tests; 74 solution tests проходят. | Adapter должен реализовать эти ports без provider leakage. |
 | 4. LanceDB | Локально завершён на macOS | Adapter реализует durable writes/reopen, batch/filter/vector+lexical paths; 79 solution tests проходят. | Linux/FTS/concurrency/index/schema gates. |
+| 5. Initial schema | Локально завершена | Versioned fail-closed schema manifest, fingerprint и embedding contract validation; adapter suite 9/9. | Schema evolution beyond compatible table registration. |
 | 5–12 | Запланированы | Задачи распределены на [доске](memory/task-board.md). | Реализация после domain/adapter boundary. |
 
 ## Человеческий итог на текущий момент

@@ -65,11 +65,13 @@ AGM / services ──> AgMemory.Client ──> Memory Domain + Retrieval + Hot/D
 
 **Результат:** [spike report](phase-3-lancedb-spike.md), `AgMemory.Storage.LanceDb`.
 
-### 5. Initial Memory Schema — **в работе**
+### 5. Initial Memory Schema — **локально завершена**
 
 Закрепить LanceDB schema для `id`, `scope`, `project`, `type`, `status`, `canonical_text`, `importance`, `confidence`, `created_at`, `updated_at`, `entities`, `embedding`, `provenance` с версиями schema и embedding contract.
 
-### 6. Hybrid Retrieval — **ожидает adapter**
+- [x] Versioned schema manifest, fingerprint и embedding identity/dimension validation реализованы.
+
+### 6. Hybrid Retrieval — **в работе**
 
 Реализовать pipeline `Hot → metadata filter → vector + lexical → deterministic RRF → duplicate removal → Context Builder` с budget-aware minimal cited context.
 

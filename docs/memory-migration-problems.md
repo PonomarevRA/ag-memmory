@@ -25,6 +25,7 @@
 | P3-03 | Открыто | NuGet binding опубликован `lennylxx/LanceDB`, хотя использует official Lance Rust crate. | Требуется supply-chain/license/provenance review до production rollout. | Platform/security owner утверждает provenance/version pin. | [phase-3-open-problems.md](phase-3-open-problems.md) |
 | P4-01 | Открыто | Adapter integration подтверждена только на macOS arm64. | Нельзя считать cross-platform provider validation завершённой. | Запустить suite на supported Linux x64. | [phase-4-open-problems.md](phase-4-open-problems.md) |
 | P4-02 | Открыто | LanceDB binding не доказал production FTS/index rebuild/concurrency/schema-evolution contract. | Phase 4 local CRUD не заменяет operational gate. | Phase 5/6 добавляют versioned schema и targeted integration suite. | [phase-4-open-problems.md](phase-4-open-problems.md) |
+| P5-01 | Открыто | Schema manifest допускает только compatible pre-manifest registration; произвольная schema evolution не выполняется автоматически. | Автоматический upgrade мог бы повредить existing records. | Release owner выбирает explicit table-version/reindex migration workflow. | [phase-5-open-problems.md](phase-5-open-problems.md) |
 | P-GH-01 | Открыто | На текущей машине отсутствует GitHub CLI `gh`. | Автоматический push + draft PR через установленный GitHub workflow недоступны. | Установить `gh`, выполнить `gh auth login`, затем publish branch. | Local check 2026-08-08 |
 
 ## Технические уточнения, уже принятые для реализации

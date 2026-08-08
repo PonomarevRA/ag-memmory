@@ -1,5 +1,8 @@
+using Apache.Arrow;
+using Apache.Arrow.Types;
 using AgMemory.Contracts;
 using AgMemory.Storage.LanceDb;
+using lancedb;
 using Xunit;
 
 namespace AgMemory.Storage.LanceDb.Tests;
@@ -175,6 +178,196 @@ public sealed class LanceDbMemoryStoreIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task SchemaManifest_MapsInitialRecordFieldsAndPersistsEmbeddingVersionAcrossReopen()
+    {
+        var path = TemporaryPath();
+        try
+        {
+            var decision = Record("decision", ScopeA, "Use schema validation before every storage read", [1f, 0f, 0f]) with
+            {
+                Type = MemoryRecordType.Decision,
+                Reason = "Prevent ambiguous storage interpretation.",
+                Entities = ["schema", "LanceDB"],
+                ExpiresAt = Now.AddDays(1),
+                DecisionDetails = new DecisionDetails(
+                    "How should the adapter open pre-existing tables?",
+                    "The schema can be changed outside the adapter.",
+                    ["Trust it", "Validate it"],
+                    "Validate it",
+                    "A mismatch must fail before data is read or written.",
+                    ["Migration requires an explicit cutover."],
+                    null)
+            };
+
+            LanceDbSchemaManifest initial;
+            await using (var store = new LanceDbMemoryStore(new(path)))
+            {
+                await WriteAsync(store, Authorized(ScopeA), [decision]);
+                initial = await store.GetSchemaManifestAsync();
+
+                Assert.Equal(LanceDbMemoryStore.CurrentStorageSchemaVersion, initial.StorageSchemaVersion);
+                var records = Assert.Single(initial.Tables, table => table.TableName == "memory_records");
+                Assert.Equal(LanceDbMemoryStore.CurrentStorageSchemaVersion, records.SchemaVersion);
+                Assert.Equal(
+                [
+                    "id", "tenant_id", "project_id", "workspace_id", "chat_id", "run_id", "record_type", "status",
+                    "canonical_text", "reason", "importance", "confidence", "estimated_token_cost", "created_at_utc",
+                    "updated_at_utc", "version", "entities_json", "provenance_json", "embedding_json", "embedding_vector_json",
+                    "expires_at_utc", "deduplication_key", "decision_details_json"
+                ],
+                records.Fields.Select(field => field.Name).ToArray());
+                Assert.All(records.Fields.Where(field => field.Name is "id" or "tenant_id" or "record_type" or "status" or "canonical_text" or
+                    "importance" or "confidence" or "created_at_utc" or "updated_at_utc" or "entities_json" or "provenance_json"),
+                    field => Assert.False(field.IsNullable));
+
+                var vector = Assert.Single(initial.Tables, table => table.Embedding is not null);
+                Assert.Equal("test", vector.Embedding!.Provider);
+                Assert.Equal("small", vector.Embedding.Model);
+                Assert.Equal("v1", vector.Embedding.ModelVersion);
+                Assert.Equal(3, vector.Embedding.Dimension);
+                Assert.Contains(vector.Fields, field => field.Name == "vector" && field.LogicalType == "fixed_size_list<float32,3>" && !field.IsNullable);
+            }
+
+            await using var reopened = new LanceDbMemoryStore(new(path));
+            var restored = await reopened.GetAsync(Authorized(ScopeA), decision.Id, default);
+            Assert.NotNull(restored);
+            Assert.Equal(decision.CanonicalText, restored!.CanonicalText);
+            Assert.Equal(decision.ExpiresAt, restored.ExpiresAt);
+            Assert.NotNull(restored.DecisionDetails);
+            Assert.Equal(decision.DecisionDetails!.Problem, restored.DecisionDetails!.Problem);
+            Assert.Equal(decision.DecisionDetails.Options, restored.DecisionDetails.Options);
+            Assert.Equal(decision.DecisionDetails.Decision, restored.DecisionDetails.Decision);
+            Assert.Equal(decision.DecisionDetails.Reason, restored.DecisionDetails.Reason);
+            Assert.Equal(decision.DecisionDetails.Consequences, restored.DecisionDetails.Consequences);
+            var manifest = await reopened.GetSchemaManifestAsync();
+            Assert.Equal(initial.Tables.Select(table => table.SchemaFingerprint), manifest.Tables.Select(table => table.SchemaFingerprint));
+        }
+        finally
+        {
+            DeleteTemporaryPath(path);
+        }
+    }
+
+    [Fact]
+    public async Task SchemaMismatch_IsRejectedWithoutReplacingSyntheticExistingTable()
+    {
+        var path = TemporaryPath();
+        try
+        {
+            await CreateMalformedRecordsTableAsync(path);
+
+            await using (var store = new LanceDbMemoryStore(new(path)))
+            {
+                var exception = await Assert.ThrowsAsync<LanceDbSchemaMismatchException>(
+                    () => store.GetSchemaManifestAsync());
+                Assert.Equal("memory_records", exception.TableName);
+            }
+
+            using var connection = new Connection();
+            await connection.Connect(path);
+            using var table = await connection.OpenTable("memory_records");
+            var schema = await table.Schema();
+            Assert.Single(schema.FieldsList);
+            Assert.Equal("id", schema.FieldsList[0].Name);
+        }
+        finally
+        {
+            DeleteTemporaryPath(path);
+        }
+    }
+
+    [Fact]
+    public async Task CompatiblePreManifestVectorTable_IsRegisteredWithoutRecreation()
+    {
+        var path = TemporaryPath();
+        try
+        {
+            var record = Record("legacy-vector", ScopeA, "compatible legacy vector", [1f, 0f, 0f]);
+            await using (var store = new LanceDbMemoryStore(new(path)))
+            {
+                await WriteAsync(store, Authorized(ScopeA), [record]);
+            }
+
+            using (var connection = new Connection())
+            {
+                await connection.Connect(path);
+                await connection.DropTable("agmemory_schema_manifest");
+            }
+
+            await using var reopened = new LanceDbMemoryStore(new(path));
+            var manifest = await reopened.GetSchemaManifestAsync();
+            Assert.Contains(manifest.Tables, table => table.Embedding?.Dimension == 3 && table.TableName.StartsWith("memory_vectors_", StringComparison.Ordinal));
+            Assert.NotNull(await reopened.GetAsync(Authorized(ScopeA), record.Id, default));
+        }
+        finally
+        {
+            DeleteTemporaryPath(path);
+        }
+    }
+
+    [Fact]
+    public async Task SchemaManifest_SeparatesEmbeddingDimensionsIntoValidatedVectorTables()
+    {
+        var path = TemporaryPath();
+        try
+        {
+            await using var store = new LanceDbMemoryStore(new(path));
+            var three = Record("three-dimensional", ScopeA, "three dimensional embedding", [1f, 0f, 0f]);
+            var four = Record("four-dimensional", ScopeA, "four dimensional embedding", [1f, 0f, 0f]) with
+            {
+                Embedding = new EmbeddingReference("test", "small", "v2", 4, "l2", "content-four-dimensional"),
+                EmbeddingVector = new float[] { 1f, 0f, 0f, 0f }
+            };
+            await WriteAsync(store, Authorized(ScopeA), [three, four]);
+
+            var vectors = (await store.GetSchemaManifestAsync()).Tables
+                .Where(table => table.Embedding is not null)
+                .OrderBy(table => table.Embedding!.Dimension)
+                .ToArray();
+            Assert.Equal(2, vectors.Length);
+            Assert.Collection(vectors,
+                table =>
+                {
+                    Assert.Equal("v1", table.Embedding!.ModelVersion);
+                    Assert.Equal(3, table.Embedding.Dimension);
+                    Assert.Contains(table.Fields, field => field.Name == "vector" && field.LogicalType == "fixed_size_list<float32,3>");
+                },
+                table =>
+                {
+                    Assert.Equal("v2", table.Embedding!.ModelVersion);
+                    Assert.Equal(4, table.Embedding.Dimension);
+                    Assert.Contains(table.Fields, field => field.Name == "vector" && field.LogicalType == "fixed_size_list<float32,4>");
+                });
+        }
+        finally
+        {
+            DeleteTemporaryPath(path);
+        }
+    }
+
+    [Fact]
+    public async Task Write_RejectsUndefinedLifecycleValuesBeforeTheyCanCreateAmbiguousRows()
+    {
+        var path = TemporaryPath();
+        try
+        {
+            await using var store = new LanceDbMemoryStore(new(path));
+            var malformed = Record("undefined-status", ScopeA, "must not persist", [1f, 0f, 0f]) with
+            {
+                Status = (MemoryLifecycleStatus)999
+            };
+            await using var transaction = await store.BeginTransactionAsync(default);
+
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+                () => transaction.WriteRecordAsync(Authorized(ScopeA), malformed, 0, default));
+        }
+        finally
+        {
+            DeleteTemporaryPath(path);
+        }
+    }
+
     private static async Task WriteAsync(LanceDbMemoryStore store, AuthorizedScopeSet scopes, IReadOnlyList<MemoryRecord> records)
     {
         await using var transaction = await store.BeginTransactionAsync(default);
@@ -192,6 +385,17 @@ public sealed class LanceDbMemoryStoreIntegrationTests
 
     private static MemoryProvenance Provenance(string evidence) => new(
         "synthetic", null, ScopeA.WorkspaceId, ScopeA.ChatId, ScopeA.RunId, null, null, [new($"evidence-{evidence}")]);
+
+    private static async Task CreateMalformedRecordsTableAsync(string path)
+    {
+        Directory.CreateDirectory(path);
+        using var connection = new Connection();
+        await connection.Connect(path);
+        var schema = new Schema.Builder()
+            .Field(new Field("id", StringType.Default, nullable: false))
+            .Build();
+        using var table = await connection.CreateEmptyTable("memory_records", new CreateTableOptions { Schema = schema });
+    }
 
     private static string TemporaryPath() => Path.Combine(Path.GetTempPath(), $"agmemory-lancedb-tests-{Guid.NewGuid():N}");
 

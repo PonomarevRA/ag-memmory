@@ -15,10 +15,14 @@ namespace AgMemory.Storage.LanceDb;
 /// </summary>
 public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSearch, IAsyncDisposable
 {
+    /// <summary>The initial, fail-closed schema policy for tables owned by this adapter.</summary>
+    public const string CurrentStorageSchemaVersion = "1.0";
+
     private const string RecordsTable = "memory_records";
     private const string HotMemoryTable = "session_hot_memory";
     private const string ReceiptsTable = "idempotency_receipts";
     private const string OutboxTable = "outbox_messages";
+    private const string SchemaManifestTable = "agmemory_schema_manifest";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] MemoryColumnNames =
     [
@@ -26,6 +30,11 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
         "canonical_text", "reason", "importance", "confidence", "estimated_token_cost", "created_at_utc",
         "updated_at_utc", "version", "entities_json", "provenance_json", "embedding_json", "embedding_vector_json",
         "expires_at_utc", "deduplication_key", "decision_details_json"
+    ];
+    private static readonly string[] SchemaManifestColumnNames =
+    [
+        "table_name", "schema_version", "schema_fingerprint", "embedding_provider", "embedding_model",
+        "embedding_model_version", "embedding_dimension", "embedding_normalization"
     ];
 
     private readonly LanceDbMemoryStoreOptions _options;
@@ -102,6 +111,34 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
             return await ReadHotMemoryAsync(exactScope, scopes, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Returns the validated physical-schema and embedding identities for migration manifests
+    /// and benchmarks. This method exposes no LanceDB or Arrow types.
+    /// </summary>
+    public async Task<LanceDbSchemaManifest> GetSchemaManifestAsync(CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            var entries = await ReadSchemaManifestRowsAsync(cancellationToken).ConfigureAwait(false);
+            var tables = new List<LanceDbTableSchemaMetadata>(entries.Count);
+            foreach (var entry in entries.OrderBy(entry => entry.TableName, StringComparer.Ordinal))
+            {
+                var definition = DefinitionFromManifest(entry);
+                using var table = await OpenTableAsync(definition.TableName, cancellationToken).ConfigureAwait(false);
+                LanceDbSchemaFingerprint.RequireMatch(definition, await table.Schema().ConfigureAwait(false));
+                tables.Add(definition.ToMetadata());
+            }
+            return new LanceDbSchemaManifest(CurrentStorageSchemaVersion, tables);
         }
         finally
         {
@@ -217,11 +254,103 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
         Directory.CreateDirectory(path);
         _connection = new Connection();
         await _connection.Connect(path).ConfigureAwait(false);
-        using (await OpenOrCreateTableAsync(RecordsTable, CreateMemorySchema(), cancellationToken).ConfigureAwait(false)) { }
-        using (await OpenOrCreateTableAsync(HotMemoryTable, CreateHotMemorySchema(), cancellationToken).ConfigureAwait(false)) { }
-        using (await OpenOrCreateTableAsync(ReceiptsTable, CreateReceiptSchema(), cancellationToken).ConfigureAwait(false)) { }
-        using (await OpenOrCreateTableAsync(OutboxTable, CreateOutboxSchema(), cancellationToken).ConfigureAwait(false)) { }
+        await EnsureTableSchemaAsync(SchemaManifestDefinition(), cancellationToken).ConfigureAwait(false);
+        foreach (var definition in CoreTableDefinitions())
+            await EnsureTableSchemaAsync(definition, cancellationToken).ConfigureAwait(false);
+        await ValidateAndRegisterVectorTablesAsync(cancellationToken).ConfigureAwait(false);
         _initialized = true;
+    }
+
+    private async Task ValidateAndRegisterVectorTablesAsync(CancellationToken cancellationToken)
+    {
+        var names = await ConnectionOrThrow().TableNames().ConfigureAwait(false);
+        foreach (var tableName in names.Where(name => name.StartsWith("memory_vectors_", StringComparison.Ordinal)))
+        {
+            var manifestEntry = await ReadSchemaManifestRowAsync(tableName, cancellationToken).ConfigureAwait(false);
+            if (manifestEntry is not null)
+            {
+                var definition = DefinitionFromManifest(manifestEntry);
+                using var table = await OpenTableAsync(tableName, cancellationToken).ConfigureAwait(false);
+                LanceDbSchemaFingerprint.RequireMatch(definition, await table.Schema().ConfigureAwait(false));
+                continue;
+            }
+
+            using var legacyTable = await OpenTableAsync(tableName, cancellationToken).ConfigureAwait(false);
+            var legacySchema = await legacyTable.Schema().ConfigureAwait(false);
+            var vectorField = legacySchema.FieldsList.SingleOrDefault(field => field.Name == "vector");
+            if (vectorField is null || vectorField.DataType is not FixedSizeListType vectorType || vectorType.ListSize <= 0)
+            {
+                throw new LanceDbSchemaMismatchException(
+                    tableName,
+                    "a versioned vector table with a fixed-size vector column",
+                    LanceDbSchemaFingerprint.Create(legacySchema),
+                    "unregistered vector table has no usable vector schema");
+            }
+
+            var batches = await legacyTable.Query().Limit(1).ToArrow().ConfigureAwait(false);
+            var firstRecord = ReadMemoryRecords(batches).FirstOrDefault();
+            if (firstRecord?.Embedding is null)
+            {
+                throw new LanceDbSchemaMismatchException(
+                    tableName,
+                    "a manifest entry or a non-empty legacy vector table with embedding metadata",
+                    "no embedding metadata",
+                    "the embedding identity cannot be inferred safely");
+            }
+
+            var definitionForLegacyTable = VectorTableDefinition(firstRecord.Embedding);
+            if (!string.Equals(definitionForLegacyTable.TableName, tableName, StringComparison.Ordinal))
+            {
+                throw new LanceDbSchemaMismatchException(
+                    tableName,
+                    definitionForLegacyTable.TableName,
+                    tableName,
+                    "legacy vector table name does not match its embedded identity");
+            }
+            if (firstRecord.Embedding.Dimension != vectorType.ListSize)
+            {
+                throw new LanceDbSchemaMismatchException(
+                    tableName,
+                    firstRecord.Embedding.Dimension.ToString(CultureInfo.InvariantCulture),
+                    vectorType.ListSize.ToString(CultureInfo.InvariantCulture),
+                    "legacy vector dimension disagrees with embedding metadata");
+            }
+            LanceDbSchemaFingerprint.RequireMatch(definitionForLegacyTable, legacySchema);
+            await VerifyOrRegisterSchemaManifestAsync(definitionForLegacyTable, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task EnsureTableSchemaAsync(LanceDbTableSchemaDefinition definition, CancellationToken cancellationToken)
+    {
+        using var table = await OpenOrCreateTableAsync(definition.TableName, definition.Schema, cancellationToken).ConfigureAwait(false);
+        LanceDbSchemaFingerprint.RequireMatch(definition, await table.Schema().ConfigureAwait(false));
+        await VerifyOrRegisterSchemaManifestAsync(definition, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task VerifyOrRegisterSchemaManifestAsync(LanceDbTableSchemaDefinition definition, CancellationToken cancellationToken)
+    {
+        var persisted = await ReadSchemaManifestRowAsync(definition.TableName, cancellationToken).ConfigureAwait(false);
+        if (persisted is not null)
+        {
+            if (!string.Equals(persisted.SchemaVersion, definition.Version, StringComparison.Ordinal) ||
+                !string.Equals(persisted.SchemaFingerprint, definition.Fingerprint, StringComparison.Ordinal) ||
+                persisted.Embedding != definition.Embedding)
+            {
+                throw new LanceDbSchemaMismatchException(
+                    definition.TableName,
+                    $"version={definition.Version}; fingerprint={definition.Fingerprint}; embedding={definition.Embedding}",
+                    $"version={persisted.SchemaVersion}; fingerprint={persisted.SchemaFingerprint}; embedding={persisted.Embedding}",
+                    "registered manifest entry disagrees with the adapter schema policy");
+            }
+            return;
+        }
+
+        using var table = await OpenTableAsync(SchemaManifestTable, cancellationToken).ConfigureAwait(false);
+        await table.MergeInsert("table_name")
+            .WhenMatchedUpdateAll()
+            .WhenNotMatchedInsertAll()
+            .Execute(BuildSchemaManifestBatch([PersistedSchemaManifestRow.From(definition)]))
+            .ConfigureAwait(false);
     }
 
     private async Task<lancedb.Table> OpenOrCreateTableAsync(string tableName, Schema schema, CancellationToken cancellationToken)
@@ -314,10 +443,9 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
 
         if (record.Embedding is null || record.EmbeddingVector is null) return;
         var vectorTableName = VectorTableName(record.Embedding);
-        using var vectorTable = await OpenOrCreateTableAsync(
-            vectorTableName,
-            CreateMemorySchema(record.Embedding.Dimension),
-            cancellationToken).ConfigureAwait(false);
+        var vectorSchema = VectorTableDefinition(record.Embedding);
+        await EnsureTableSchemaAsync(vectorSchema, cancellationToken).ConfigureAwait(false);
+        using var vectorTable = await OpenTableAsync(vectorTableName, cancellationToken).ConfigureAwait(false);
         await vectorTable.MergeInsert("id")
             .WhenMatchedUpdateAll()
             .WhenNotMatchedInsertAll()
@@ -382,6 +510,82 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
             var vectorItem = new Field("item", FloatType.Default, nullable: false);
             builder.Field(new Field("vector", new FixedSizeListType(vectorItem, dimension), nullable: false));
         }
+        return builder.Build();
+    }
+
+    private static LanceDbTableSchemaDefinition SchemaManifestDefinition() => new(
+        SchemaManifestTable,
+        CurrentStorageSchemaVersion,
+        CreateSchemaManifestSchema());
+
+    private static IEnumerable<LanceDbTableSchemaDefinition> CoreTableDefinitions()
+    {
+        yield return new LanceDbTableSchemaDefinition(RecordsTable, CurrentStorageSchemaVersion, CreateMemorySchema());
+        yield return new LanceDbTableSchemaDefinition(HotMemoryTable, CurrentStorageSchemaVersion, CreateHotMemorySchema());
+        yield return new LanceDbTableSchemaDefinition(ReceiptsTable, CurrentStorageSchemaVersion, CreateReceiptSchema());
+        yield return new LanceDbTableSchemaDefinition(OutboxTable, CurrentStorageSchemaVersion, CreateOutboxSchema());
+    }
+
+    private static LanceDbTableSchemaDefinition VectorTableDefinition(EmbeddingReference embedding)
+    {
+        embedding.Validate();
+        return new LanceDbTableSchemaDefinition(
+            VectorTableName(embedding),
+            CurrentStorageSchemaVersion,
+            CreateMemorySchema(embedding.Dimension),
+            new LanceDbEmbeddingSchemaMetadata(
+                embedding.Provider,
+                embedding.Model,
+                embedding.ModelVersion,
+                embedding.Dimension,
+                embedding.Normalization));
+    }
+
+    private static LanceDbTableSchemaDefinition DefinitionFromManifest(PersistedSchemaManifestRow entry)
+    {
+        if (string.Equals(entry.TableName, SchemaManifestTable, StringComparison.Ordinal)) return SchemaManifestDefinition();
+        if (string.Equals(entry.TableName, RecordsTable, StringComparison.Ordinal))
+            return new LanceDbTableSchemaDefinition(RecordsTable, CurrentStorageSchemaVersion, CreateMemorySchema());
+        if (string.Equals(entry.TableName, HotMemoryTable, StringComparison.Ordinal))
+            return new LanceDbTableSchemaDefinition(HotMemoryTable, CurrentStorageSchemaVersion, CreateHotMemorySchema());
+        if (string.Equals(entry.TableName, ReceiptsTable, StringComparison.Ordinal))
+            return new LanceDbTableSchemaDefinition(ReceiptsTable, CurrentStorageSchemaVersion, CreateReceiptSchema());
+        if (string.Equals(entry.TableName, OutboxTable, StringComparison.Ordinal))
+            return new LanceDbTableSchemaDefinition(OutboxTable, CurrentStorageSchemaVersion, CreateOutboxSchema());
+
+        if (entry.Embedding is null || !entry.TableName.StartsWith("memory_vectors_", StringComparison.Ordinal))
+        {
+            throw new LanceDbSchemaMismatchException(
+                entry.TableName,
+                "an adapter-owned core table or a versioned vector table",
+                $"version={entry.SchemaVersion}; fingerprint={entry.SchemaFingerprint}",
+                "manifest contains an unknown table identity");
+        }
+
+        var embedding = new EmbeddingReference(
+            entry.Embedding.Provider,
+            entry.Embedding.Model,
+            entry.Embedding.ModelVersion,
+            entry.Embedding.Dimension,
+            entry.Embedding.Normalization,
+            "manifest");
+        var definition = VectorTableDefinition(embedding);
+        if (!string.Equals(definition.TableName, entry.TableName, StringComparison.Ordinal))
+        {
+            throw new LanceDbSchemaMismatchException(
+                entry.TableName,
+                definition.TableName,
+                entry.TableName,
+                "vector table name does not match its persisted embedding identity");
+        }
+        return definition;
+    }
+
+    private static Schema CreateSchemaManifestSchema()
+    {
+        var builder = new Schema.Builder();
+        foreach (var column in SchemaManifestColumnNames)
+            builder.Field(new Field(column, StringType.Default, column is not "table_name" and not "schema_version" and not "schema_fingerprint"));
         return builder.Build();
     }
 
@@ -493,6 +697,19 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
         ], rows.Length);
     }
 
+    private static RecordBatch BuildSchemaManifestBatch(IReadOnlyCollection<PersistedSchemaManifestRow> entries)
+    {
+        if (entries.Count == 0) throw new ArgumentException("A schema manifest batch cannot be empty.", nameof(entries));
+        var rows = entries.ToArray();
+        return new RecordBatch(CreateSchemaManifestSchema(),
+        [
+            Strings(rows.Select(row => row.TableName)), Strings(rows.Select(row => row.SchemaVersion)),
+            Strings(rows.Select(row => row.SchemaFingerprint)), Strings(rows.Select(row => row.EmbeddingProvider)),
+            Strings(rows.Select(row => row.EmbeddingModel)), Strings(rows.Select(row => row.EmbeddingModelVersion)),
+            Strings(rows.Select(row => row.EmbeddingDimension)), Strings(rows.Select(row => row.EmbeddingNormalization))
+        ], rows.Length);
+    }
+
     private static StringArray Strings(IEnumerable<string?> values)
     {
         var builder = new StringArray.Builder();
@@ -517,6 +734,34 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
     private static IEnumerable<IdempotencyReceipt> ReadReceiptRows(RecordBatch batch)
     {
         for (var index = 0; index < batch.Length; index++) yield return PersistedReceiptRow.Read(batch, index).ToReceipt();
+    }
+
+    private async Task<PersistedSchemaManifestRow?> ReadSchemaManifestRowAsync(string tableName, CancellationToken cancellationToken)
+    {
+        using var table = await OpenTableAsync(SchemaManifestTable, cancellationToken).ConfigureAwait(false);
+        var batches = await table.Query().Where($"table_name = {Literal(tableName)}").ToArrow().ConfigureAwait(false);
+        var entries = ReadSchemaManifestRows(batches).ToArray();
+        if (entries.Length > 1)
+        {
+            throw new LanceDbSchemaMismatchException(
+                SchemaManifestTable,
+                "one manifest entry per table name",
+                $"{entries.Length} entries for {tableName}",
+                "manifest uniqueness was violated");
+        }
+        return entries.SingleOrDefault();
+    }
+
+    private async Task<IReadOnlyList<PersistedSchemaManifestRow>> ReadSchemaManifestRowsAsync(CancellationToken cancellationToken)
+    {
+        using var table = await OpenTableAsync(SchemaManifestTable, cancellationToken).ConfigureAwait(false);
+        var batches = await table.Query().ToArrow().ConfigureAwait(false);
+        return ReadSchemaManifestRows(batches).ToArray();
+    }
+
+    private static IEnumerable<PersistedSchemaManifestRow> ReadSchemaManifestRows(RecordBatch batch)
+    {
+        for (var index = 0; index < batch.Length; index++) yield return PersistedSchemaManifestRow.Read(batch, index);
     }
 
     private static string BuildAuthorizedPredicate(AuthorizedScopeSet scopes) =>
@@ -572,7 +817,13 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
 
     private static string Utc(DateTimeOffset value) => value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
 
-    private static DateTimeOffset ParseUtc(string value) => DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).ToUniversalTime();
+    private static DateTimeOffset ParseUtc(string value)
+    {
+        var parsed = DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        if (parsed.Offset != TimeSpan.Zero)
+            throw new InvalidDataException("LanceDB timestamp values must be persisted with a UTC offset.");
+        return parsed;
+    }
 
     private static IReadOnlyList<string> Tokenize(string text) => text.Split(
         [' ', '\t', '\r', '\n', '.', ',', ';', ':', '!', '?', '(', ')', '[', ']', '{', '}', '/', '\\', '-', '_'],
@@ -587,6 +838,15 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
         var candidateTerms = Tokenize(content).ToHashSet(StringComparer.Ordinal);
         var matches = queryTerms.Count(candidateTerms.Contains);
         return matches == 0 ? 0d : (double)matches / queryTerms.Count;
+    }
+
+    private static void ValidateMemoryRecordForSchema(MemoryRecord record)
+    {
+        record.Validate();
+        if (!Enum.IsDefined(record.Type))
+            throw new ArgumentOutOfRangeException(nameof(record.Type), record.Type, "Memory record type must be a defined contract value.");
+        if (!Enum.IsDefined(record.Status))
+            throw new ArgumentOutOfRangeException(nameof(record.Status), record.Status, "Memory record status must be a defined contract value.");
     }
 
     private void ThrowIfDisposed()
@@ -665,7 +925,7 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
         {
             ThrowIfUnavailable();
             ArgumentNullException.ThrowIfNull(record);
-            record.Validate();
+            ValidateMemoryRecordForSchema(record);
             if (!authorizedScopes.Contains(record.Scope)) return new(false, null);
             var existing = await CurrentRecordAsync(record.Id, cancellationToken).ConfigureAwait(false);
             if (existing is not null)
@@ -821,7 +1081,7 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
 
         public static PersistedMemoryRow From(MemoryRecord record)
         {
-            record.Validate();
+            ValidateMemoryRecordForSchema(record);
             var values = new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["id"] = record.Id.Value,
@@ -886,7 +1146,7 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
                 Required("deduplication_key"),
                 Optional("decision_details_json") is { } decision ? Deserialize<DecisionDetails>(decision) : null,
                 vector);
-            record.Validate();
+            ValidateMemoryRecordForSchema(record);
             return record;
         }
 
@@ -972,6 +1232,64 @@ public sealed class LanceDbMemoryStore : IMemoryStore, IVectorSearch, ILexicalSe
             message.MessageId, message.Scope.Scope.TenantId.Value, message.Scope.Scope.ProjectId?.Value, message.Scope.Scope.WorkspaceId?.Value,
             message.Scope.Scope.ChatId?.Value, message.Scope.Scope.RunId?.Value, message.Kind, message.CommandId.Value, message.CorrelationId.Value,
             message.MemoryId, message.ContractVersion.Value);
+    }
+
+    private sealed record PersistedSchemaManifestRow(
+        string TableName,
+        string SchemaVersion,
+        string SchemaFingerprint,
+        string? EmbeddingProvider,
+        string? EmbeddingModel,
+        string? EmbeddingModelVersion,
+        string? EmbeddingDimension,
+        string? EmbeddingNormalization)
+    {
+        public LanceDbEmbeddingSchemaMetadata? Embedding
+        {
+            get
+            {
+                var supplied = new[] { EmbeddingProvider, EmbeddingModel, EmbeddingModelVersion, EmbeddingDimension, EmbeddingNormalization };
+                if (supplied.All(value => value is null)) return null;
+                if (supplied.Any(string.IsNullOrWhiteSpace))
+                {
+                    throw new LanceDbSchemaMismatchException(
+                        TableName,
+                        "a complete embedding identity or no embedding identity",
+                        "a partially populated embedding identity",
+                        "manifest embedding metadata is ambiguous");
+                }
+                if (!int.TryParse(EmbeddingDimension, CultureInfo.InvariantCulture, out var dimension) || dimension <= 0)
+                {
+                    throw new LanceDbSchemaMismatchException(
+                        TableName,
+                        "a positive embedding dimension",
+                        EmbeddingDimension ?? "null",
+                        "manifest embedding dimension is invalid");
+                }
+                return new LanceDbEmbeddingSchemaMetadata(
+                    EmbeddingProvider!, EmbeddingModel!, EmbeddingModelVersion!, dimension, EmbeddingNormalization!);
+            }
+        }
+
+        public static PersistedSchemaManifestRow From(LanceDbTableSchemaDefinition definition) => new(
+            definition.TableName,
+            definition.Version,
+            definition.Fingerprint,
+            definition.Embedding?.Provider,
+            definition.Embedding?.Model,
+            definition.Embedding?.ModelVersion,
+            definition.Embedding?.Dimension.ToString(CultureInfo.InvariantCulture),
+            definition.Embedding?.Normalization);
+
+        public static PersistedSchemaManifestRow Read(RecordBatch batch, int index) => new(
+            Required(batch, "table_name", index),
+            Required(batch, "schema_version", index),
+            Required(batch, "schema_fingerprint", index),
+            Value(batch, "embedding_provider", index),
+            Value(batch, "embedding_model", index),
+            Value(batch, "embedding_model_version", index),
+            Value(batch, "embedding_dimension", index),
+            Value(batch, "embedding_normalization", index));
     }
 
     private sealed record PersistedEvidence(string Identity, string? SourceSystem, string? FragmentIdentity, string? ApprovedMetadata)
