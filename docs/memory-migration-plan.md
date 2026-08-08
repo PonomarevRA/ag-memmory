@@ -77,11 +77,13 @@ AGM / services ──> AgMemory.Client ──> Memory Domain + Retrieval + Hot/D
 
 - [x] Pipeline extracted into `AgMemory.Core/Retrieval`, including independent provider fallback, deterministic dedupe and cited budget packing.
 
-### 7. Hot Memory — **в работе**
+### 7. Hot Memory — **локально завершена**
 
 Реализовать bounded TTL `SessionHotMemory`: current goal, active entities, recent decisions, open questions и working facts, включая decay/promotion policy.
 
-### 8. Decision Memory — **ожидает core/store**
+- [x] Structured state, bounded TTL, deterministic decay and promotion eligibility are implemented in `AgMemory.Core/HotMemory`.
+
+### 8. Decision Memory — **в работе**
 
 Реализовать compact decision trace: Problem, Context, Options, Decision, Reason, Consequences, Outcome. Chain-of-thought не принимается и не хранится.
 

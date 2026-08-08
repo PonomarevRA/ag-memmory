@@ -15,6 +15,13 @@ public interface IMemoryQueryService
     Task<SessionHotMemory?> ReadHotMemoryAsync(HotMemoryReadRequest request, CancellationToken cancellationToken);
 }
 
+public interface IHotMemoryService
+{
+    Task<HotMemoryStateResult> UpdateAsync(UpdateHotMemoryStateCommand command, CancellationToken cancellationToken);
+    Task<HotMemoryStateSnapshot?> ReadStateAsync(HotMemoryReadRequest request, CancellationToken cancellationToken);
+    Task<HotMemoryPromotionResult> PromoteAsync(HotMemoryPromotionCommand command, CancellationToken cancellationToken);
+}
+
 public sealed record ScopeAuthorizationResult(
     AuthorizedScopeSet? AuthorizedScopes,
     MemoryError? Error,

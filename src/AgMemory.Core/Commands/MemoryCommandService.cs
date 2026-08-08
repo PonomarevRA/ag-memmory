@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using AgMemory.Contracts;
 
 namespace AgMemory.Core;
@@ -16,7 +14,7 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
     private const string ForgetKind = "forget";
 
     private readonly IMemoryStore _store;
-    private readonly IAuthorizationScopeValidator _authorization;
+    private readonly CommandPreflight _preflight;
     private readonly IIngressRedactor _redactor;
     private readonly IEmbeddingProvider _embeddingProvider;
     private readonly IEmbeddingPolicy _embeddingPolicy;
@@ -24,6 +22,7 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
     private readonly IClock _clock;
     private readonly IIdGenerator _ids;
     private readonly MemoryCoreOptions _options;
+    private readonly HotMemoryStateCommandHandler _hotMemoryStateHandler;
 
     public MemoryCommandService(
         IMemoryStore store,
@@ -37,7 +36,6 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
         MemoryCoreOptions options)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
-        _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
         _redactor = redactor ?? throw new ArgumentNullException(nameof(redactor));
         _embeddingProvider = embeddingProvider ?? throw new ArgumentNullException(nameof(embeddingProvider));
         _embeddingPolicy = embeddingPolicy ?? throw new ArgumentNullException(nameof(embeddingPolicy));
@@ -46,10 +44,18 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
         _ids = ids ?? throw new ArgumentNullException(nameof(ids));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _options.Validate();
+        _preflight = new(authorization ?? throw new ArgumentNullException(nameof(authorization)), _options);
+        _hotMemoryStateHandler = new(_store, _preflight, _redactor, _clock, _ids, _options);
     }
 
     public Task<RememberResult> ReceiveAsync(RememberCommand command, CancellationToken cancellationToken) =>
         RememberAsync(command, cancellationToken);
+
+    internal Task<HotMemoryStateResult> ReplaceHotMemoryStateAsync(
+        UpdateHotMemoryStateCommand command,
+        HotMemoryPolicy policy,
+        CancellationToken cancellationToken) =>
+        _hotMemoryStateHandler.ReplaceAsync(command, policy, cancellationToken);
 
     public async Task<RememberResult> RememberAsync(RememberCommand command, CancellationToken cancellationToken)
     {
@@ -315,23 +321,10 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
 
     private async Task<ScopeAuthorizationResult> AuthorizeAsync(
         ActorId actor, MemoryOperation operation, MemoryScope scope, CancellationToken cancellationToken) =>
-        await _authorization.AuthorizeAsync(actor, operation, scope, cancellationToken).ConfigureAwait(false);
+        await _preflight.AuthorizeAsync(actor, operation, scope, cancellationToken).ConfigureAwait(false);
 
-    private bool TryValidateEnvelope(CommandEnvelope envelope, out MemoryError? error)
-    {
-        error = null;
-        try
-        {
-            envelope.Validate();
-            if (envelope.ContractVersion != _options.SupportedContractVersion)
-                error = new(MemoryErrorCode.UnsupportedContractVersion, nameof(envelope.ContractVersion));
-        }
-        catch (ArgumentException)
-        {
-            error = new(MemoryErrorCode.InvalidArgument, nameof(envelope));
-        }
-        return error is null;
-    }
+    private bool TryValidateEnvelope(CommandEnvelope envelope, out MemoryError? error) =>
+        _preflight.TryValidateEnvelope(envelope, out error);
 
     private static bool TryValidateRecordInput(MemoryRecordInput input, out MemoryError? error)
     {
@@ -376,39 +369,14 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
     }
 
     private static ScopeSelector? GetRequestedSelector(AuthorizedScopeSet set, MemoryScope requested) =>
-        set.Selectors.SingleOrDefault(selector => selector.Matches(requested));
+        CommandPreflight.ExactRequestedSelector(set, requested);
 
-    private static void ValidateUnitInterval(double value, string parameterName)
-    {
-        if (!double.IsFinite(value) || value is < 0d or > 1d)
-            throw new ArgumentOutOfRangeException(parameterName);
-    }
+    private static void ValidateUnitInterval(double value, string parameterName) =>
+        CommandValueSupport.ValidateUnitInterval(value, parameterName);
 
     private static bool TryTransition(
         MemoryLifecycleStatus current, MemoryLifecycleAction action, bool hasRelated, out MemoryLifecycleStatus next)
-    {
-        next = current;
-        switch (action)
-        {
-            case MemoryLifecycleAction.Confirm when current == MemoryLifecycleStatus.Draft && hasRelated:
-                next = MemoryLifecycleStatus.Active;
-                return true;
-            case MemoryLifecycleAction.Invalidate when current is MemoryLifecycleStatus.Draft or MemoryLifecycleStatus.Active:
-                next = MemoryLifecycleStatus.Invalid;
-                return true;
-            case MemoryLifecycleAction.Supersede when current == MemoryLifecycleStatus.Active && hasRelated:
-            case MemoryLifecycleAction.ResolveConflict when current == MemoryLifecycleStatus.Active && hasRelated:
-                next = MemoryLifecycleStatus.Superseded;
-                return true;
-            case MemoryLifecycleAction.Contradict when current == MemoryLifecycleStatus.Active && hasRelated:
-                return true;
-            case MemoryLifecycleAction.UndoSupersede when current == MemoryLifecycleStatus.Superseded:
-                next = MemoryLifecycleStatus.Active;
-                return true;
-            default:
-                return false;
-        }
-    }
+        => CommandValueSupport.TryTransition(current, action, hasRelated, out next);
 
     private DateTimeOffset UtcNow()
     {
@@ -416,9 +384,8 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
         return now.Offset == TimeSpan.Zero ? now : now.ToUniversalTime();
     }
 
-    private OutboxMessage Outbox(CommandEnvelope envelope, ScopeSelector scope, string kind, MemoryId id) => new(
-        scope, Hash($"{envelope.CommandId.Value}|{kind}"), kind, envelope.CommandId, envelope.CorrelationId,
-        id.Value, _options.SupportedContractVersion);
+    private OutboxMessage Outbox(CommandEnvelope envelope, ScopeSelector scope, string kind, MemoryId id) =>
+        CommandOutbox.Create(envelope, scope, kind, id, _options.SupportedContractVersion);
 
     private RememberResult RememberFailure(MemoryErrorCode code, string? field) => RememberFailure(new(code, field));
     private RememberResult RememberFailure(MemoryError error) => new(RememberOutcome.Failed, null, error, _options.SupportedContractVersion);
@@ -429,15 +396,9 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
     private ForgetResult ForgetFailure(MemoryErrorCode code, string? field) => ForgetFailure(new(code, field));
     private ForgetResult ForgetFailure(MemoryError error) => new(ForgetOutcome.Failed, null, error, _options.SupportedContractVersion);
 
-    internal static string Canonicalize(string value) => string.Join(' ', value.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-    internal static IReadOnlyList<string> NormalizeEntities(IEnumerable<string> entities) => entities
-        .Select(Canonicalize).Where(item => item.Length > 0).Distinct(StringComparer.Ordinal)
-        .OrderBy(item => item, StringComparer.Ordinal).ToArray();
-    internal static int EstimateTokenCost(string content) => Math.Max(1, (content.Length + 3) / 4);
-    internal static string ScopeKey(MemoryScope scope) => string.Join("|", new[]
-    {
-        scope.TenantId.Value, scope.ProjectId?.Value ?? "<null>", scope.WorkspaceId?.Value ?? "<null>",
-        scope.ChatId?.Value ?? "<null>", scope.RunId?.Value ?? "<null>"
-    });
-    internal static string Hash(string source) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source))).ToLowerInvariant();
+    internal static string Canonicalize(string value) => CommandValueSupport.Canonicalize(value);
+    internal static IReadOnlyList<string> NormalizeEntities(IEnumerable<string> entities) => CommandValueSupport.NormalizeEntities(entities);
+    internal static int EstimateTokenCost(string content) => CommandValueSupport.EstimateTokenCost(content);
+    internal static string ScopeKey(MemoryScope scope) => CommandValueSupport.ScopeKey(scope);
+    internal static string Hash(string source) => CommandValueSupport.Hash(source);
 }

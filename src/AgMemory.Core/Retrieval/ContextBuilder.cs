@@ -70,8 +70,9 @@ internal sealed class ContextBuilder(
 
     private MemorySearchHit ToSearchHit(SessionHotMemory hot, ContractVersion retrievalConfigurationVersion)
     {
+        var content = HotMemoryStateCodec.TryRender(hot.Content, out var rendered) ? rendered : hot.Content;
         var record = new MemoryRecord(hot.Id, hot.Scope, MemoryRecordType.Summary, MemoryLifecycleStatus.Active,
-            hot.Content, null, 1d, 1d, MemoryCommandService.EstimateTokenCost(hot.Content), hot.CreatedAt,
+            content, null, 1d, 1d, MemoryCommandService.EstimateTokenCost(content), hot.CreatedAt,
             hot.UpdatedAt, hot.Version, [], hot.Provenance, null, hot.ExpiresAt, $"hot:{hot.Id.Value}");
         return ToSearchHit(record, retrievalConfigurationVersion);
     }
