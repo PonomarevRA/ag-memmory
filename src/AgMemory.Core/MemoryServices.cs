@@ -77,6 +77,7 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
             return RememberFailure(canonicalError!);
 
         EmbeddingReference? embedding = null;
+        ReadOnlyMemory<float>? embeddingVector = null;
         if (canonical.EmbeddingMode == EmbeddingMode.Required)
         {
             var policy = await _embeddingPolicy.GetAsync(command.Envelope.RequestedScope, cancellationToken).ConfigureAwait(false);
@@ -86,6 +87,7 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
             if (!policy.Contract.Matches(generated.Reference))
                 return RememberFailure(new(MemoryErrorCode.EmbeddingContractMismatch, null, policy.PolicyVersion));
             embedding = generated.Reference;
+            embeddingVector = generated.Vector.ToArray();
         }
 
         var fingerprint = Hash($"{canonical.Type}|{canonical.CanonicalText}|{canonical.Reason}|{canonical.ExpiresAt:O}|{canonical.EmbeddingMode}");
@@ -117,7 +119,7 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
                 canonical.CanonicalText, canonical.Reason, canonical.Importance, canonical.Confidence,
                 EstimateTokenCost(canonical.CanonicalText), now, now, 1,
                 NormalizeEntities(canonical.Entities), canonical.Provenance, embedding,
-                canonical.ExpiresAt, deduplicationKey, canonical.DecisionDetails);
+                canonical.ExpiresAt, deduplicationKey, canonical.DecisionDetails, embeddingVector);
             outcome = RememberOutcome.Created;
             expectedVersion = 0;
         }
@@ -136,6 +138,7 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
                 UpdatedAt = now,
                 Version = duplicate.Version + 1,
                 Embedding = embedding ?? duplicate.Embedding,
+                EmbeddingVector = embeddingVector ?? duplicate.EmbeddingVector,
                 Provenance = duplicate.Provenance with { Evidence = evidence }
             };
             outcome = RememberOutcome.Reinforced;

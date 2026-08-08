@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Phase 3 technical spike only; production use remains isolated to the future storage adapter. -->
+    <!-- Confined to the LanceDB spike and AgMemory.Storage.LanceDb adapter. -->
     <PackageVersion Include="Apache.Arrow" Version="22.1.0" />
     <PackageVersion Include="LanceDB" Version="2.5.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.10" />

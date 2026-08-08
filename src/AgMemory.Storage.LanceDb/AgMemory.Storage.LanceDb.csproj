@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>AgMemory.Storage.LanceDb</RootNamespace>
+    <Description>LanceDB storage adapter for the provider-neutral AgMemory ports.</Description>
+    <PackageTags>$(PackageTags);lancedb;storage;adapter</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Apache.Arrow" />
+    <PackageReference Include="LanceDB" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../AgMemory.Contracts/AgMemory.Contracts.csproj" />
+  </ItemGroup>
+</Project>

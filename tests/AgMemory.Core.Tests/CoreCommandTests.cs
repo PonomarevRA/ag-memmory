@@ -85,6 +85,7 @@ public sealed class CoreCommandTests
         Assert.Equal(MemoryErrorCode.PolicyNotConfigured, missingPolicy.Error!.Code);
         Assert.Equal(RememberOutcome.Reinforced, configured.Outcome);
         Assert.NotNull(configured.Memory!.Embedding);
+        Assert.Equal(2, configured.Memory.EmbeddingVector!.Value.Length);
         Assert.Equal(MemoryErrorCode.EmbeddingContractMismatch, mismatch.Error!.Code);
     }
 

@@ -235,7 +235,8 @@ public sealed record MemoryRecord(
     EmbeddingReference? Embedding,
     DateTimeOffset? ExpiresAt,
     string DeduplicationKey,
-    DecisionDetails? DecisionDetails = null)
+    DecisionDetails? DecisionDetails = null,
+    ReadOnlyMemory<float>? EmbeddingVector = null)
 {
     public void Validate()
     {
@@ -247,7 +248,8 @@ public sealed record MemoryRecord(
         ValidateUnitInterval(Confidence, nameof(Confidence));
         if (EstimatedTokenCost <= 0) throw new ArgumentOutOfRangeException(nameof(EstimatedTokenCost));
         if (Version <= 0) throw new ArgumentOutOfRangeException(nameof(Version));
-        if (CreatedAt.Offset != TimeSpan.Zero || UpdatedAt.Offset != TimeSpan.Zero || ExpiresAt?.Offset != TimeSpan.Zero)
+        if (CreatedAt.Offset != TimeSpan.Zero || UpdatedAt.Offset != TimeSpan.Zero ||
+            (ExpiresAt is { } expiry && expiry.Offset != TimeSpan.Zero))
             throw new ArgumentException("Record timestamps must be UTC.");
         ArgumentNullException.ThrowIfNull(Entities);
         if (Entities.Any(string.IsNullOrWhiteSpace))
@@ -256,6 +258,15 @@ public sealed record MemoryRecord(
             throw new ArgumentException("Entities must be deduplicated.", nameof(Entities));
         Provenance.Validate();
         Embedding?.Validate();
+        if (EmbeddingVector is { } vector)
+        {
+            if (Embedding is null)
+                throw new ArgumentException("An embedding vector requires an embedding reference.", nameof(EmbeddingVector));
+            if (vector.Length != Embedding.Dimension)
+                throw new ArgumentException("Embedding vector dimension must match its embedding reference.", nameof(EmbeddingVector));
+            if (vector.Span.ToArray().Any(value => !float.IsFinite(value)))
+                throw new ArgumentException("Embedding vector values must be finite.", nameof(EmbeddingVector));
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(DeduplicationKey, nameof(DeduplicationKey));
         if (Type == MemoryRecordType.Decision)
             (DecisionDetails ?? throw new ArgumentException("Decision details are required.", nameof(DecisionDetails))).Validate();

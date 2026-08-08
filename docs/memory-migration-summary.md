@@ -7,7 +7,7 @@
 | 1. AGM analysis | Локально завершена | Документировано фактическое AGM поведение и добавлен безопасный versioned synthetic corpus. | Production snapshot/real query baseline только после data approval. |
 | 2. Domain | Локально завершена | Contracts/Core с typed commands, exact scope, redaction/idempotency, RRF и budgeted context; 16 новых tests. | Provider port firewall остаётся отдельной Phase 3 задачей. |
 | 3. Storage abstraction | Локально завершена | Scope-safe ports, batch primitive и firewall tests; 74 solution tests проходят. | Adapter должен реализовать эти ports без provider leakage. |
-| 4. LanceDB | Spike завершён | macOS arm64 доказал local CRUD, filter, vector search и reopen на LanceDB 2.5.0. | Production adapter и Linux/FTS/concurrency/index/schema tests. |
+| 4. LanceDB | Локально завершён на macOS | Adapter реализует durable writes/reopen, batch/filter/vector+lexical paths; 79 solution tests проходят. | Linux/FTS/concurrency/index/schema gates. |
 | 5–12 | Запланированы | Задачи распределены на [доске](memory/task-board.md). | Реализация после domain/adapter boundary. |
 
 ## Человеческий итог на текущий момент

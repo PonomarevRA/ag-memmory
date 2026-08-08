@@ -42,4 +42,19 @@ public sealed class ContractValueTests
         Assert.Throws<ArgumentException>(missingDecision.Validate);
         Assert.Throws<ArgumentException>(() => new SourceEvidenceRef(" ").Validate());
     }
+
+    [Fact]
+    public void CanonicalRecord_AllowsNoExpiryAndValidatesProviderNeutralEmbeddingVector()
+    {
+        var scope = new MemoryScope(new("tenant"));
+        var provenance = new MemoryProvenance("test", null, null, null, null, null, null, [new("evidence")]);
+        var embedding = new EmbeddingReference("test", "model", "v1", 2, "l2", "content");
+        var valid = new MemoryRecord(new("memory"), scope, MemoryRecordType.Fact, MemoryLifecycleStatus.Active,
+            "text", null, .5, .5, 1, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, 1,
+            ["entity"], provenance, embedding, null, "dedup", null, new float[] { 1f, 0f });
+        var invalidDimension = valid with { EmbeddingVector = new float[] { 1f } };
+
+        valid.Validate();
+        Assert.Throws<ArgumentException>(invalidDimension.Validate);
+    }
 }

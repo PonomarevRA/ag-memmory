@@ -55,17 +55,17 @@ AGM / services ──> AgMemory.Client ──> Memory Domain + Retrieval + Hot/D
 - [x] Provider-neutral boundary спроектирована.
 - [x] Реализовать и проверить public ports на готовом domain model отдельной задачей.
 
-### 4. LanceDB Adapter — **в работе**
+### 4. LanceDB Adapter — **локально завершён на macOS**
 
 Создать `AgMemory.Storage.LanceDb`: schema mapping, persistence, vector/lexical search, metadata filters и batch operations. Только этот project может ссылаться на LanceDB/Arrow.
 
 - [x] macOS arm64 spike доказал create/open/reopen, Arrow mapping, batch/upsert, filter, vector search и delete на LanceDB 2.5.0.
-- [ ] Реализовать production adapter и integration suite.
+- [x] Реализовать production adapter и integration suite.
 - [ ] Проверить Linux x64, concurrency, FTS/RRF, indexes/rebuild и schema evolution.
 
 **Результат:** [spike report](phase-3-lancedb-spike.md), `AgMemory.Storage.LanceDb`.
 
-### 5. Initial Memory Schema — **ожидает domain model**
+### 5. Initial Memory Schema — **в работе**
 
 Закрепить LanceDB schema для `id`, `scope`, `project`, `type`, `status`, `canonical_text`, `importance`, `confidence`, `created_at`, `updated_at`, `entities`, `embedding`, `provenance` с версиями schema и embedding contract.
 
