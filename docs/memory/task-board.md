@@ -11,7 +11,7 @@
 | 5. Initial schema | done (local) | phase5_initial_schema | Versioned fail-closed schema manifest and 9 adapter tests. |
 | 6. Hybrid retrieval | done (local) | phase6_hybrid_retrieval | Extracted retrieval pipeline, real LanceDB integration and 96 passing tests. |
 | 7. Hot memory | done (local) | phase7_hot_memory | Structured TTL/decay/promotion policy and 105 passing solution tests. |
-| 8. Decision memory | active | decision-memory task | Compact trace commands and validation. |
+| 8. Decision memory | done (local) | phase8_decision_memory | Compact durable trace delegated through command pipeline; 110 solution tests. |
 | 9. Existing migration | planned | migration task | Import CLI, manifest, replay/parity. |
 | 10. Agent integration | planned | integration task | Client plus four MCP tools. |
 | 11. Token economy | planned | token-policy task | Enforcement/reporting tests. |

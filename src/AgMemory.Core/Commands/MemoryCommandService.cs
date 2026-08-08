@@ -336,7 +336,8 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
             ValidateUnitInterval(input.Importance, nameof(input.Importance));
             ValidateUnitInterval(input.Confidence, nameof(input.Confidence));
             input.Provenance.Validate();
-            if (input.Type == MemoryRecordType.Decision) (input.DecisionDetails ?? throw new ArgumentException()).Validate();
+            if (input.Type == MemoryRecordType.Decision)
+                DecisionTraceValidator.Validate(input.DecisionDetails ?? throw new ArgumentException());
         }
         catch (ArgumentException)
         {
@@ -355,11 +356,12 @@ public sealed class MemoryCommandService : IMemoryCommandService, ICommandReceiv
             {
                 CanonicalText = Canonicalize(input.CanonicalText),
                 Reason = input.Reason is null ? null : Canonicalize(input.Reason),
-                Entities = NormalizeEntities(input.Entities)
+                Entities = NormalizeEntities(input.Entities),
+                DecisionDetails = input.DecisionDetails is null ? null : DecisionTraceValidator.Canonicalize(input.DecisionDetails)
             };
             if (string.IsNullOrWhiteSpace(canonical.CanonicalText)) throw new ArgumentException();
             if (canonical.Reason is not null && string.IsNullOrWhiteSpace(canonical.Reason)) throw new ArgumentException();
-            if (canonical.Type == MemoryRecordType.Decision) canonical.DecisionDetails!.Validate();
+            if (canonical.Type == MemoryRecordType.Decision) DecisionTraceValidator.Validate(canonical.DecisionDetails!);
         }
         catch (ArgumentException)
         {

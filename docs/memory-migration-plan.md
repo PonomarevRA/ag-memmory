@@ -83,9 +83,11 @@ AGM / services ──> AgMemory.Client ──> Memory Domain + Retrieval + Hot/D
 
 - [x] Structured state, bounded TTL, deterministic decay and promotion eligibility are implemented in `AgMemory.Core/HotMemory`.
 
-### 8. Decision Memory — **в работе**
+### 8. Decision Memory — **локально завершена**
 
 Реализовать compact decision trace: Problem, Context, Options, Decision, Reason, Consequences, Outcome. Chain-of-thought не принимается и не хранится.
+
+- [x] Dedicated compact trace validator/service uses the central authorized and redacted command pipeline.
 
 ### 9. Existing Memory Migration — **ожидает adapter**
 

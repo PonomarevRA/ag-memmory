@@ -196,26 +196,6 @@ public sealed record EmbeddingContract(
         string.Equals(Normalization, reference.Normalization, StringComparison.Ordinal);
 }
 
-public sealed record DecisionDetails(
-    string Problem,
-    string Context,
-    IReadOnlyList<string> Options,
-    string Decision,
-    string Reason,
-    IReadOnlyList<string> Consequences,
-    string? Outcome)
-{
-    public void Validate()
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(Problem, nameof(Problem));
-        ArgumentException.ThrowIfNullOrWhiteSpace(Context, nameof(Context));
-        ArgumentNullException.ThrowIfNull(Options);
-        ArgumentException.ThrowIfNullOrWhiteSpace(Decision, nameof(Decision));
-        ArgumentException.ThrowIfNullOrWhiteSpace(Reason, nameof(Reason));
-        ArgumentNullException.ThrowIfNull(Consequences);
-    }
-}
-
 /// <summary>Canonical durable memory. Reason is a nullable, ingress-redacted TD-P2-01 field.</summary>
 public sealed record MemoryRecord(
     MemoryId Id,
