@@ -1,0 +1,2 @@
+# Preserve the upstream Three.js ES module byte-for-byte; its published source contains one mixed-indent line.
+src/AgMemory.Web/wwwroot/vendor/three/three.core.js whitespace=-space-before-tab

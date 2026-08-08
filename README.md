@@ -60,6 +60,11 @@ server-side environment variables или user secrets, не через browser c
 bands/degrees и агрегированные рёбра. `SharedEntity` означает совпадение нормализованной сущности во
 время запроса, а не сохранённый `MemoryRelation`.
 
+Если браузер поддерживает WebGL2, страница показывает локальную 3D-карту; иначе автоматически остаётся
+доступной совместимая 2D-карта и текстовая сводка. Three.js 0.185.1 закреплён и vendored в Web host с
+MIT-лицензией и provenance в `src/AgMemory.Web/wwwroot/vendor/three/`; страница не загружает CDN или
+другие внешние browser-зависимости.
+
 See [`docs/codebase-guide.md`](docs/codebase-guide.md) for feature ownership and
 [`docs/ui-ux-design-brief.md`](docs/ui-ux-design-brief.md) for UI behaviour and privacy boundaries.
 

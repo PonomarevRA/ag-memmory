@@ -1,0 +1,25 @@
+schema: agent-memory-object/v1
+id: memory-graph.decision.threejs-topology-atlas
+kind: decision
+area: memory-graph
+status: approved
+title: Use a Three.js topology atlas for dense memory graphs
+summary: A local 3D view separates structural neighborhoods while preserving the safe graph projection.
+recorded: "2026-08-08"
+updated: "2026-08-08"
+tags: [memory-graph, threejs, webgl, accessibility]
+sources:
+  - kind: task
+    ref: User approval of the Memory Universe concept, 2026-08-08
+  - kind: code
+    ref: src/AgMemory.Web/wwwroot/vendor/memory-graph-universe.js
+  - kind: document
+    ref: docs/implementation-architecture.md
+payload:
+  problem: The planar renderer makes dense structural neighborhoods difficult to distinguish.
+  decision: Render the existing bounded safe snapshot in a local Three.js topology atlas with topology-only depth and a 2D/text fallback.
+  rationale: Depth separates components and communities without altering graph semantics or transmitting additional data.
+  consequences:
+    - Space and visual groups never claim semantic similarity, relevance, chronology, or causality.
+    - WebGL failure, context loss, and reduced motion retain the accessible 2D/text route.
+    - Local static Three.js assets replace CDN or browser build dependencies.

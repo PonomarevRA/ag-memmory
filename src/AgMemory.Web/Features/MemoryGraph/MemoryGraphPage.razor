@@ -31,16 +31,40 @@
     }
     else
     {
-        <section class="memory-graph-card" aria-label="Интерактивный граф памяти">
+        <section class="memory-graph-card" aria-label="Интерактивная вселенная памяти">
             <div class="memory-graph-toolbar" aria-label="Управление масштабом графа">
                 <button class="ui-button ui-button--secondary" type="button" @onclick="ZoomInAsync">Увеличить</button>
                 <button class="ui-button ui-button--secondary" type="button" @onclick="ZoomOutAsync">Уменьшить</button>
                 <button class="ui-button ui-button--ghost" type="button" @onclick="ResetAsync">Сбросить вид</button>
                 <button class="ui-button ui-button--ghost" type="button" @onclick="LoadAsync">Обновить</button>
             </div>
-            <canvas @ref="_canvas" class="memory-graph-canvas" tabindex="0" role="img" aria-label="Граф memory с локальными узлами и связями" aria-describedby="memory-graph-summary">
-                Ваш браузер не поддерживает canvas. Текстовое описание графа находится ниже.
-            </canvas>
+            <div class="memory-graph-stage">
+                <div class="memory-graph-scene">
+                    <canvas @ref="_canvas" class="memory-graph-canvas" tabindex="0" role="img" aria-label="Интерактивная трёхмерная карта графа памяти" aria-describedby="memory-graph-scene-description memory-graph-selection memory-graph-summary">
+                        Ваш браузер не поддерживает canvas. Текстовое описание графа находится ниже.
+                    </canvas>
+                    <canvas @ref="_fallbackCanvas" class="memory-graph-canvas" hidden tabindex="-1" role="img" aria-hidden="true" aria-label="Совместимая двумерная карта графа памяти" aria-describedby="memory-graph-summary">
+                        Ваш браузер не поддерживает canvas. Текстовое описание графа находится ниже.
+                    </canvas>
+                    <p id="memory-graph-scene-description" class="visually-hidden">Узлы можно выбирать касанием или щелчком. Перетаскивайте сцену для обзора, используйте колесо для масштаба. Клавиши стрелок, Q и E меняют положение камеры, плюс и минус меняют масштаб, Home или 0 возвращают исходный вид, Escape снимает выбор.</p>
+                </div>
+                <aside class="memory-graph-inspector" aria-label="Инспектор и легенда карты">
+                    <section>
+                        <h2>Выбор</h2>
+                        <p id="memory-graph-selection" @ref="_selectionSummary" class="memory-graph-selection" aria-live="polite">Нет выбранного узла. Выберите узел, чтобы увидеть его безопасные агрегированные свойства и ближайшее окружение.</p>
+                    </section>
+                    <details class="memory-graph-legend" open>
+                        <summary>Как читать карту</summary>
+                        <ul>
+                            <li>Форма и цвет обозначают тип memory.</li>
+                            <li>Размер узла показывает степень, внутренний акцент — важность.</li>
+                            <li>Яркость и кольцо показывают диапазон уверенности.</li>
+                            <li>Нейтральные линии — агрегированные <code>SharedEntity</code>-связи.</li>
+                        </ul>
+                        <p class="small-copy">Глубина, расстояние и расположение служат только для обзора структуры. Они не выражают близость, причинность, время или тип отношения.</p>
+                    </details>
+                </aside>
+            </div>
         </section>
 
         <section id="memory-graph-summary" class="memory-graph-summary" aria-live="polite">
@@ -49,7 +73,11 @@
             <ul class="memory-graph-summary__nodes">
                 @foreach (var node in _graph.Nodes)
                 {
-                    <li @key="node.Id"><strong>@node.Label</strong> · @node.Type · степень @node.Degree · важность @node.ImportanceBand/5 · уверенность @node.ConfidenceBand/5</li>
+                    <li @key="node.Id">
+                        <button class="memory-graph-summary__node" type="button" @onclick="() => SelectNodeAsync(node.Id)">
+                            <strong>@node.Label</strong> · @node.Type · степень @node.Degree · важность @node.ImportanceBand/5 · уверенность @node.ConfidenceBand/5
+                        </button>
+                    </li>
                 }
             </ul>
             @if (_graph.Edges.Count > 0)
@@ -68,6 +96,8 @@
 
 @code {
     private ElementReference _canvas;
+    private ElementReference _fallbackCanvas;
+    private ElementReference _selectionSummary;
     private MemoryGraphInterop? _interop;
     private MemoryGraphApiResponse? _graph;
     private bool _loading = true;
@@ -84,9 +114,9 @@
             return;
         }
 
-        if (IsAvailable && !_canvasInitialized && _interop is not null)
+        if (!_loading && IsAvailable && !_canvasInitialized && _interop is not null)
         {
-            await _interop.InitializeAsync(_canvas);
+            await _interop.InitializeAsync(_canvas, _fallbackCanvas, _selectionSummary);
             _canvasInitialized = true;
             await _interop.RenderAsync(_graph!);
         }
@@ -121,6 +151,12 @@
     {
         if (_interop is not null)
             await _interop.ResetAsync();
+    }
+
+    private async Task SelectNodeAsync(string id)
+    {
+        if (_interop is not null)
+            await _interop.SelectNodeAsync(id);
     }
 
     private string LabelFor(string id) => _graph?.Nodes.FirstOrDefault(node => node.Id == id)?.Label ?? "Узел";

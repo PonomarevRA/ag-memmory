@@ -1,0 +1,22 @@
+schema: agent-memory-object/v1
+id: memory-graph.outcome.threejs-universe
+kind: outcome
+area: memory-graph
+status: completed
+title: Delivered the Three.js Memory Universe renderer
+summary: The local graph now has topology-only 3D exploration, responsive accessibility, and 2D fallback.
+recorded: "2026-08-08"
+updated: "2026-08-08"
+tags: [memory-graph, threejs, webgl, testing]
+sources:
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor
+  - kind: code
+    ref: src/AgMemory.Web/wwwroot/vendor/memory-graph-universe.js
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/MemoryGraphUniverseAssetTests.cs
+payload:
+  change: Added a pinned local Three.js renderer, deterministic safe layout, selection controls, responsive scene-first UI, and 2D fallback.
+  measurement: The full solution test run completed with 142 passed and no failures or skips.
+  result: Dense graph neighborhoods can be explored in 3D without changing the endpoint, graph semantics, or browser data boundary.
+  next_action: Smoke-test WebGL context loss and mobile layouts against a non-empty configured local graph after host launch.

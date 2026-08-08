@@ -11,3 +11,11 @@ objects:
     tags: [memory-graph, projection, privacy, lancedb]
     recorded: "2026-08-08"
     updated: "2026-08-08"
+  - id: memory-graph.decision.threejs-topology-atlas
+    title: Use a Three.js topology atlas for dense memory graphs
+    status: approved
+    summary: A local 3D view separates structural neighborhoods while preserving the safe graph projection.
+    path: threejs-topology-atlas.a2a.yaml
+    tags: [memory-graph, threejs, webgl, accessibility]
+    recorded: "2026-08-08"
+    updated: "2026-08-08"
