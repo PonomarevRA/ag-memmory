@@ -5,6 +5,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Apache.Arrow" />
+    <PackageReference Include="LanceDB" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio">
       <PrivateAssets>all</PrivateAssets>
@@ -14,6 +16,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/AgMemory.Contracts/AgMemory.Contracts.csproj" />
     <ProjectReference Include="../../src/AgMemory.Core/AgMemory.Core.csproj" />
+    <ProjectReference Include="../../src/AgMemory.Storage.LanceDb/AgMemory.Storage.LanceDb.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../AgMemory.Core.Tests/TestKit.cs" Link="TestKit.cs" />

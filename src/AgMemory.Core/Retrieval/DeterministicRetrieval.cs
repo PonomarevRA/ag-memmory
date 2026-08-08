@@ -30,7 +30,15 @@ public static class DeterministicRetrieval
 
         return fused.Values
             .Select(item => ToHit(item, graphScores?.GetValueOrDefault(item.Record.Id) ?? 0d))
-            .OrderByDescending(hit => hit.Contribution.FusedScore + hit.Contribution.GraphContribution)
+            // A deduplication key identifies the same reusable memory even if a faulty
+            // or eventually-consistent provider returns multiple durable IDs. The highest
+            // fully explained RRF/graph score wins; ID makes a score tie reproducible.
+            .GroupBy(hit => hit.Record.DeduplicationKey, StringComparer.Ordinal)
+            .Select(group => group
+                .OrderByDescending(FinalScore)
+                .ThenBy(hit => hit.Record.Id.Value, StringComparer.Ordinal)
+                .First())
+            .OrderByDescending(FinalScore)
             .ThenBy(hit => hit.Record.Id.Value, StringComparer.Ordinal)
             .Take(limit)
             .Select((hit, index) => hit with { Rank = index + 1 })
@@ -102,9 +110,13 @@ public static class DeterministicRetrieval
     private static void ValidateCandidate(SearchPortCandidate candidate)
     {
         ArgumentNullException.ThrowIfNull(candidate);
+        candidate.Record.Validate();
         if (candidate.ProviderRank <= 0) throw new ArgumentOutOfRangeException(nameof(candidate.ProviderRank));
         if (!double.IsFinite(candidate.ProviderScore)) throw new ArgumentOutOfRangeException(nameof(candidate.ProviderScore));
     }
+
+    private static double FinalScore(MemorySearchHit hit) =>
+        hit.Contribution.FusedScore + hit.Contribution.GraphContribution;
 
     private sealed class MutableCandidate(MemoryRecord record)
     {

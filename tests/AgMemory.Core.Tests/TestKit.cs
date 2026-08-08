@@ -259,12 +259,14 @@ internal sealed class InMemoryStore : IMemoryStore
 internal sealed class TestLexicalSearch : ILexicalSearch
 {
     public IReadOnlyList<SearchPortCandidate> Candidates { get; set; } = [];
+    public Exception? Failure { get; set; }
     public int Calls { get; private set; }
     public SearchPortRequest? LastRequest { get; private set; }
     public Task<IReadOnlyList<SearchPortCandidate>> SearchAsync(SearchPortRequest request, CancellationToken cancellationToken)
     {
         Calls++;
         LastRequest = request;
+        if (Failure is not null) return Task.FromException<IReadOnlyList<SearchPortCandidate>>(Failure);
         return Task.FromResult(Candidates);
     }
 }
@@ -272,12 +274,17 @@ internal sealed class TestLexicalSearch : ILexicalSearch
 internal sealed class TestVectorSearch : IVectorSearch
 {
     public IReadOnlyList<SearchPortCandidate> Candidates { get; set; } = [];
+    public bool ReturnEmptyWhenQueryVectorMissing { get; set; }
+    public Exception? Failure { get; set; }
     public int Calls { get; private set; }
     public SearchPortRequest? LastRequest { get; private set; }
     public Task<IReadOnlyList<SearchPortCandidate>> SearchAsync(SearchPortRequest request, CancellationToken cancellationToken)
     {
         Calls++;
         LastRequest = request;
+        if (Failure is not null) return Task.FromException<IReadOnlyList<SearchPortCandidate>>(Failure);
+        if (ReturnEmptyWhenQueryVectorMissing && request.QueryVector is null)
+            return Task.FromResult<IReadOnlyList<SearchPortCandidate>>([]);
         return Task.FromResult(Candidates);
     }
 }
@@ -285,10 +292,14 @@ internal sealed class TestVectorSearch : IVectorSearch
 internal sealed class TestGraph : IMemoryGraph
 {
     public IReadOnlyList<GraphRerankResult> Results { get; set; } = [];
+    public Exception? Failure { get; set; }
     public int Calls { get; private set; }
+    public GraphRerankRequest? LastRequest { get; private set; }
     public Task<IReadOnlyList<GraphRerankResult>> RerankAsync(GraphRerankRequest request, CancellationToken cancellationToken)
     {
         Calls++;
+        LastRequest = request;
+        if (Failure is not null) return Task.FromException<IReadOnlyList<GraphRerankResult>>(Failure);
         return Task.FromResult(Results);
     }
 }

@@ -71,11 +71,13 @@ AGM / services ──> AgMemory.Client ──> Memory Domain + Retrieval + Hot/D
 
 - [x] Versioned schema manifest, fingerprint и embedding identity/dimension validation реализованы.
 
-### 6. Hybrid Retrieval — **в работе**
+### 6. Hybrid Retrieval — **локально завершена**
 
 Реализовать pipeline `Hot → metadata filter → vector + lexical → deterministic RRF → duplicate removal → Context Builder` с budget-aware minimal cited context.
 
-### 7. Hot Memory — **ожидает core/store**
+- [x] Pipeline extracted into `AgMemory.Core/Retrieval`, including independent provider fallback, deterministic dedupe and cited budget packing.
+
+### 7. Hot Memory — **в работе**
 
 Реализовать bounded TTL `SessionHotMemory`: current goal, active entities, recent decisions, open questions и working facts, включая decay/promotion policy.
 

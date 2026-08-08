@@ -90,6 +90,26 @@ public sealed class CoreCommandTests
     }
 
     [Fact]
+    public async Task Remember_RequiredEmbeddingReplay_PreservesPreReceiptEmbeddingTiming()
+    {
+        var fixture = Fixture();
+        fixture.Authorization.Allow(TestData.Actor, MemoryOperation.Remember, TestData.Scope);
+        fixture.EmbeddingPolicy.Result = new(new("fake", "model", "v1", 2, "l2", TestData.ContractVersion), "embedding-v1");
+        var command = new RememberCommand(TestData.Envelope("replay-vector"), new(
+            MemoryRecordType.Fact, "replay-safe vector memory", null, .5, .5, [], TestData.Provenance(),
+            EmbeddingMode: EmbeddingMode.Required));
+
+        var created = await fixture.Service.RememberAsync(command, default);
+        var replay = await fixture.Service.RememberAsync(command, default);
+
+        Assert.Equal(RememberOutcome.Created, created.Outcome);
+        Assert.Equal(RememberOutcome.IdempotencyReplay, replay.Outcome);
+        Assert.Equal(2, fixture.EmbeddingProvider.Calls);
+        Assert.Single(fixture.Store.Records);
+        Assert.Single(fixture.Store.Outbox);
+    }
+
+    [Fact]
     public async Task LifecycleAndHotMemory_UseOptimisticVersionsAndZeroCannotOverwrite()
     {
         var fixture = Fixture();

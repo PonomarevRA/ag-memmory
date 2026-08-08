@@ -9,8 +9,8 @@
 | 3. Storage abstraction | done (local) | phase3_storage_abstraction | Scope-safe ports, dependency firewall и 74 passing solution tests. |
 | 4. LanceDB adapter | done (local/macOS) | phase4_lancedb_adapter | Durable adapter and 4 real LanceDB tests; 79 solution tests pass. |
 | 5. Initial schema | done (local) | phase5_initial_schema | Versioned fail-closed schema manifest and 9 adapter tests. |
-| 6. Hybrid retrieval | active | retrieval task | Query executor, RRF, bounded cited context. |
-| 7. Hot memory | planned | hot-memory task | TTL/decay/promotion use cases. |
+| 6. Hybrid retrieval | done (local) | phase6_hybrid_retrieval | Extracted retrieval pipeline, real LanceDB integration and 96 passing tests. |
+| 7. Hot memory | active | hot-memory task | TTL/decay/promotion use cases. |
 | 8. Decision memory | planned | decision-memory task | Compact trace commands and validation. |
 | 9. Existing migration | planned | migration task | Import CLI, manifest, replay/parity. |
 | 10. Agent integration | planned | integration task | Client plus four MCP tools. |

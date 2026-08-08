@@ -9,6 +9,7 @@
 | 3. Storage abstraction | Локально завершена | Scope-safe ports, batch primitive и firewall tests; 74 solution tests проходят. | Adapter должен реализовать эти ports без provider leakage. |
 | 4. LanceDB | Локально завершён на macOS | Adapter реализует durable writes/reopen, batch/filter/vector+lexical paths; 79 solution tests проходят. | Linux/FTS/concurrency/index/schema gates. |
 | 5. Initial schema | Локально завершена | Versioned fail-closed schema manifest, fingerprint и embedding contract validation; adapter suite 9/9. | Schema evolution beyond compatible table registration. |
+| 6. Hybrid retrieval | Локально завершена | Provider-neutral parallel fusion, deterministic dedupe, hot-first cited context and real LanceDB integration; 96 solution tests pass. | Production SLO and explicit rendered-token measurement. |
 | 5–12 | Запланированы | Задачи распределены на [доске](memory/task-board.md). | Реализация после domain/adapter boundary. |
 
 ## Человеческий итог на текущий момент

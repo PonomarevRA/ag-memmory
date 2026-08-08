@@ -121,7 +121,8 @@ public sealed record MemorySearchRequest(
     IReadOnlySet<MemoryLifecycleStatus>? Statuses,
     int Limit,
     ContractVersion RetrievalConfigurationVersion,
-    ContractVersion ContractVersion);
+    ContractVersion ContractVersion,
+    ReadOnlyMemory<float>? QueryVector = null);
 
 public sealed record HotMemoryReadRequest(
     ActorId Actor,
@@ -140,7 +141,8 @@ public sealed record MemoryContextRequest(
     ContractVersion RetrievalConfigurationVersion,
     ContractVersion ContextConfigurationVersion,
     ContractVersion ContractVersion,
-    bool AllowSingleSummaryFallback = false);
+    bool AllowSingleSummaryFallback = false,
+    ReadOnlyMemory<float>? QueryVector = null);
 
 public sealed record RetrievalContribution(
     int? LexicalRank,
@@ -158,11 +160,20 @@ public sealed record MemorySearchHit(
     ContractVersion RetrievalConfigurationVersion,
     ContractVersion? RerankerConfigurationVersion);
 
+/// <summary>Provider-neutral execution state; it deliberately carries no exception or provider detail.</summary>
+public enum RetrievalSourceStatus { NotRequested, Completed, Unavailable }
+
+public sealed record RetrievalExecution(
+    RetrievalSourceStatus Lexical,
+    RetrievalSourceStatus Vector,
+    RetrievalSourceStatus Graph);
+
 public sealed record MemorySearchResult(
     IReadOnlyList<MemorySearchHit> Hits,
     MemoryError? Error,
     ContractVersion ContractVersion,
-    ContractVersion RetrievalConfigurationVersion);
+    ContractVersion RetrievalConfigurationVersion,
+    RetrievalExecution? Execution = null);
 
 public sealed record MemoryCitation(MemoryId MemoryId, IReadOnlyList<string> EvidenceIds);
 
