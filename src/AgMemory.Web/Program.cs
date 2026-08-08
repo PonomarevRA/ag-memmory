@@ -3,9 +3,22 @@ using AgMemory.Web.Features.Chat;
 using AgMemory.Web.Features.MemoryGraph;
 using AgMemory.Web.Features.Navigation;
 using AgMemory.Web.Gateway;
+using AgMemory.Web.Hosting;
 using System.Threading.RateLimiting;
 
-var builder = WebApplication.CreateBuilder(args);
+var desktopHost = MacDesktopHost.Detect();
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    EnvironmentName = desktopHost.IsEnabled ? Environments.Development : null,
+    ContentRootPath = desktopHost.IsEnabled ? AppContext.BaseDirectory : null
+});
+desktopHost.ConfigureLoopbackKestrel(builder);
+var applicationDataDirectory = LocalApplicationPaths.ResolveDataDirectory();
+Directory.CreateDirectory(applicationDataDirectory);
+builder.Configuration
+    .AddJsonFile(LocalApplicationPaths.PersistentSettingsPath(applicationDataDirectory), optional: true, reloadOnChange: false)
+    .AddEnvironmentVariables();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -31,9 +44,13 @@ builder.Services.AddHttpClient(OpenAiCompatibleChatGateway.HttpClientName, clien
 builder.Services.AddSingleton<IModelChatGateway, OpenAiCompatibleChatGateway>();
 builder.Services.AddScoped<BrowserStateInterop>();
 var memoryGraphOptions = builder.Configuration.GetSection(MemoryGraphHostOptions.SectionName).Get<MemoryGraphHostOptions>() ?? new();
-builder.Services.AddSingleton(new LocalMemoryGraphFeature(memoryGraphOptions, builder.Environment.ContentRootPath));
+builder.Services.AddSingleton(new LocalMemoryGraphFeature(memoryGraphOptions, applicationDataDirectory));
 
 var app = builder.Build();
+app.Logger.LogInformation(
+    "Local memory graph composition: configured={Configured}; development={IsDevelopment}",
+    memoryGraphOptions.TryCreate(applicationDataDirectory) is not null,
+    app.Environment.IsDevelopment());
 
 if (!app.Environment.IsDevelopment())
 {
@@ -41,7 +58,8 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
+if (!desktopHost.IsEnabled)
+    app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 app.UseRateLimiter();
@@ -53,6 +71,7 @@ app.MapGet(MemoryGraphEndpoint.Route, MemoryGraphEndpoint.HandleAsync);
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+desktopHost.OpenBrowserWhenStarted(app);
 app.Run();
 
 public partial class Program;

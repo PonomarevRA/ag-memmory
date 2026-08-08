@@ -15,9 +15,9 @@ public sealed class MemoryGraphHostOptions
     public string? ActorId { get; init; }
     public MemoryGraphScopeOptions? Scope { get; init; }
 
-    internal MemoryGraphHostConfiguration? TryCreate(string contentRootPath)
+    internal MemoryGraphHostConfiguration? TryCreate(string dataDirectory)
     {
-        if (!Enabled || string.IsNullOrWhiteSpace(contentRootPath) || string.IsNullOrWhiteSpace(StoragePath) ||
+        if (!Enabled || string.IsNullOrWhiteSpace(dataDirectory) ||
             string.IsNullOrWhiteSpace(ActorId) || Scope is null || string.IsNullOrWhiteSpace(Scope.TenantId))
             return null;
 
@@ -32,7 +32,10 @@ public sealed class MemoryGraphHostOptions
             scope.Validate();
             var actor = new ActorId(ActorId);
             actor.Validate(nameof(ActorId));
-            var storagePath = Path.GetFullPath(StoragePath, contentRootPath);
+            var configuredStoragePath = string.IsNullOrWhiteSpace(StoragePath) ? "memory-graph.lancedb" : StoragePath;
+            var storagePath = Path.IsPathRooted(configuredStoragePath)
+                ? Path.GetFullPath(configuredStoragePath)
+                : Path.GetFullPath(Path.Combine(dataDirectory, configuredStoragePath));
             return new(actor, scope, storagePath);
         }
         catch

@@ -1,0 +1,28 @@
+schema: agent-memory-object/v1
+id: web-ui.outcome.macos-standalone-persistence
+kind: outcome
+area: web-ui
+status: completed
+title: Delivered update-safe standalone macOS Web app packaging
+summary: A self-contained macOS app runs on loopback and keeps settings and graph storage outside its bundle.
+recorded: "2026-08-08"
+updated: "2026-08-08"
+tags: [web-ui, macos, packaging, persistence, standalone]
+sources:
+  - kind: code
+    ref: src/AgMemory.Web/Program.cs
+  - kind: code
+    ref: src/AgMemory.Web/Hosting/MacDesktopHost.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryGraph/MemoryGraphHostOptions.cs
+  - kind: code
+    ref: scripts/package-macos-app.sh
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/MemoryGraphEndpointTests.cs
+  - kind: document
+    ref: README.md
+payload:
+  change: Added a self-contained .app packager, automatic loopback browser host, and an external application-data root.
+  measurement: The osx-arm64 app bundle passed plist and code-signature checks; full Release suite passed 144 tests.
+  result: Replacing AgMemory.app does not replace appsettings.local.json or the default memory-graph.lancedb store.
+  next_action: Use an Apple Developer signing identity and notarization before distributing the zip outside local development.

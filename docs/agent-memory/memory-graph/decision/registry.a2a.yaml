@@ -19,3 +19,11 @@ objects:
     tags: [memory-graph, threejs, webgl, accessibility]
     recorded: "2026-08-08"
     updated: "2026-08-08"
+  - id: memory-graph.decision.development-default-scope
+    title: Enable a synthetic exact scope for local Development graph viewing
+    status: approved
+    summary: Development starts the loopback graph with a non-production local actor and tenant scope.
+    path: development-default-scope.a2a.yaml
+    tags: [memory-graph, development, scope, loopback]
+    recorded: "2026-08-08"
+    updated: "2026-08-08"

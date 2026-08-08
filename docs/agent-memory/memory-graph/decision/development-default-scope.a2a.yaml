@@ -1,0 +1,25 @@
+schema: agent-memory-object/v1
+id: memory-graph.decision.development-default-scope
+kind: decision
+area: memory-graph
+status: approved
+title: Enable a synthetic exact scope for local Development graph viewing
+summary: Development starts the loopback graph with a non-production local actor and tenant scope.
+recorded: "2026-08-08"
+updated: "2026-08-08"
+tags: [memory-graph, development, scope, loopback]
+sources:
+  - kind: config
+    ref: src/AgMemory.Web/appsettings.Development.json
+  - kind: code
+    ref: src/AgMemory.Web/Program.cs
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/MemoryGraphEndpointTests.cs
+payload:
+  problem: A fresh local launch had no configured actor and exact scope, so the graph endpoint was unavailable.
+  decision: Configure the synthetic local-development actor and tenant scope in Development only.
+  rationale: It makes local graph inspection usable while keeping the endpoint input-free, loopback-only, and unavailable outside Development.
+  consequences:
+    - The default graph may be empty until local records exist under that scope.
+    - appsettings.local.json or environment variables can override the local scope.
+    - Production still requires a separate identity-to-scope authorization design.

@@ -2,7 +2,9 @@ using System.Net;
 using System.Reflection;
 using System.Text.Json;
 using AgMemory.Web.Features.MemoryGraph;
+using AgMemory.Web.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Xunit;
@@ -132,6 +134,70 @@ public sealed class MemoryGraphEndpointTests
             Assert.Null(snapshot.Error);
             Assert.Empty(snapshot.Nodes);
             Assert.Empty(snapshot.Edges);
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public async Task ConfiguredFeature_DefaultsStorageToThePersistentApplicationDirectory()
+    {
+        var root = TemporaryPath();
+        var storagePath = Path.Combine(root, "memory-graph.lancedb");
+        try
+        {
+            Directory.CreateDirectory(root);
+            await using var feature = new LocalMemoryGraphFeature(new MemoryGraphHostOptions
+            {
+                Enabled = true,
+                ActorId = "local-graph-actor",
+                Scope = new MemoryGraphScopeOptions { TenantId = "local-tenant" }
+            }, root);
+
+            var snapshot = await feature.ReadAsync(default);
+
+            Assert.Null(snapshot.Error);
+            Assert.True(Directory.Exists(storagePath));
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public void ExplicitApplicationDataDirectoryIsResolvedOutsideTheBundle()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"agmemory-data-{Guid.NewGuid():N}");
+
+        var resolved = LocalApplicationPaths.ResolveDataDirectory(root);
+
+        Assert.Equal(Path.GetFullPath(root), resolved);
+    }
+
+    [Fact]
+    public async Task DevelopmentSettings_EnableTheExplicitLocalGraphScope()
+    {
+        var webAssemblyDirectory = Path.GetDirectoryName(typeof(Program).Assembly.Location)!;
+        var developmentSettings = Path.Combine(webAssemblyDirectory, "appsettings.Development.json");
+        var configuration = new ConfigurationBuilder()
+            .AddJsonFile(developmentSettings, optional: false)
+            .Build();
+
+        var options = configuration.GetSection(MemoryGraphHostOptions.SectionName).Get<MemoryGraphHostOptions>();
+
+        Assert.NotNull(options);
+        Assert.True(options.Enabled);
+        Assert.Equal("local-development", options.ActorId);
+        Assert.Equal("local-development", options.Scope?.TenantId);
+
+        var root = TemporaryPath();
+        try
+        {
+            await using var feature = new LocalMemoryGraphFeature(options, root);
+            Assert.True(feature.IsConfigured);
         }
         finally
         {

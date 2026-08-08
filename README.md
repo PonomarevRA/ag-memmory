@@ -68,6 +68,30 @@ MIT-лицензией и provenance в `src/AgMemory.Web/wwwroot/vendor/three/`
 See [`docs/codebase-guide.md`](docs/codebase-guide.md) for feature ownership and
 [`docs/ui-ux-design-brief.md`](docs/ui-ux-design-brief.md) for UI behaviour and privacy boundaries.
 
+## macOS standalone app
+
+Build a self-contained `.app` bundle for Apple Silicon (or pass `osx-x64` for Intel):
+
+```bash
+./scripts/package-macos-app.sh osx-arm64
+open artifacts/macos/osx-arm64/AgMemory.app
+```
+
+The bundle starts a loopback-only host and opens the UI in the default browser. Drag the generated
+`AgMemory.app` to `/Applications` to install it; the accompanying ZIP is suitable for transfer.
+It is ad-hoc signed for local use. External distribution still requires an Apple Developer certificate
+and notarization.
+
+The app bundle is replaceable code. User-owned configuration and default LanceDB data live outside it in
+`~/Library/Application Support/AgMemory/` (or the absolute path in `AGMEMORY_DATA_DIR`), so replacing
+`AgMemory.app` on update does not remove existing data. Put optional server-only settings in
+`appsettings.local.json` in that same directory; environment variables override the file. A relative
+`MemoryGraph__StoragePath` is resolved beneath that persistent directory, and defaults to
+`memory-graph.lancedb` when the local graph is enabled. Development enables the graph with an explicit
+synthetic `local-development` actor and tenant scope, so a fresh loopback launch can open
+`/memory-graph` without manual configuration; use `appsettings.local.json` or environment variables to
+select another local scope.
+
 The pack produces the synchronized compatibility packages `Agm.Memory.Abstractions`,
 `Agm.Memory` and `Agm.Memory.Sqlite` at version `1.0.0`. Set the standard MSBuild
 property `Version` to issue a coordinated compatibility version, for example:

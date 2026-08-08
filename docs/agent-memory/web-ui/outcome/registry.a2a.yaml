@@ -19,3 +19,11 @@ objects:
     tags: [web-ui, chat, small-yuki, llama-server, local-model]
     recorded: "2026-08-08"
     updated: "2026-08-08"
+  - id: web-ui.outcome.macos-standalone-persistence
+    title: Delivered update-safe standalone macOS Web app packaging
+    status: completed
+    summary: A self-contained macOS app runs on loopback and keeps settings and graph storage outside its bundle.
+    path: macos-standalone-persistence.a2a.yaml
+    tags: [web-ui, macos, packaging, persistence, standalone]
+    recorded: "2026-08-08"
+    updated: "2026-08-08"
