@@ -20,10 +20,10 @@ public sealed class AgMemoryTools(LocalAgMemoryMcpRuntime memory)
     }
 
     [McpServerTool(Name = "memory_remember", Title = "Remember in AgMemory", Destructive = false, Idempotent = true, OpenWorld = false)]
-    [Description("Persist a concise reusable fact, decision, preference, task, or outcome in the fixed local AgMemory scope. Do not store secrets, raw conversation logs, or private reasoning.")]
+    [Description("Persist a concise reusable fact, constraint, preference, task, procedure, observation, incident, lesson, outcome, summary, or event in the fixed local AgMemory scope. Do not store secrets, raw conversation logs, private reasoning, or Decision records; Decisions require a structured trace unavailable through this tool.")]
     public async Task<string> RememberAsync(
         [Description("Concise reusable memory, up to 6000 characters.")] string content,
-        [Description("AgMemory record type, for example Fact, Decision, Preference, Task, or Outcome.")] string memoryType = "Fact",
+        [Description("AgMemory record type, for example Fact, Constraint, Preference, Task, or Outcome. Decision is unavailable through this tool.")] string memoryType = "Fact",
         [Description("Importance from 0 through 1.")] double importance = 0.6d,
         [Description("Confidence from 0 through 1.")] double confidence = 0.8d,
         [Description("Optional compact entity labels used for local graph grouping.")] string[]? entities = null,

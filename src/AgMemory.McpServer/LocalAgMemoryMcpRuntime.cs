@@ -110,6 +110,8 @@ public sealed class LocalAgMemoryMcpRuntime : IAsyncDisposable
             throw new ArgumentException("Memory content is required and cannot exceed 6000 characters.", nameof(content));
         if (!Enum.TryParse<MemoryRecordType>(memoryType, ignoreCase: true, out var type))
             throw new ArgumentException("Unsupported memory type.", nameof(memoryType));
+        if (type == MemoryRecordType.Decision)
+            throw new ArgumentException("Decision memory requires a structured trace and is unavailable through the local MCP.", nameof(memoryType));
         if (!double.IsFinite(importance) || importance is < 0d or > 1d)
             throw new ArgumentOutOfRangeException(nameof(importance));
         if (!double.IsFinite(confidence) || confidence is < 0d or > 1d)

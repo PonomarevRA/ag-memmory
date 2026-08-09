@@ -32,4 +32,24 @@ public sealed class LocalAgMemoryMcpRuntimeTests
         Assert.Throws<InvalidOperationException>(() => LocalAgMemoryMcpConfiguration.Create("/tmp/store", null, "tenant"));
         Assert.Throws<InvalidOperationException>(() => LocalAgMemoryMcpConfiguration.Create("/tmp/store", "actor", null));
     }
+
+    [Fact]
+    public async Task RejectsDecisionMemoryBecauseTheMcpToolCannotSupplyItsRequiredTrace()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"agmemory-mcp-{Guid.NewGuid():N}");
+        try
+        {
+            var configuration = LocalAgMemoryMcpConfiguration.Create(directory, "codex-test", "tenant-test");
+            await using var runtime = new LocalAgMemoryMcpRuntime(configuration);
+
+            var error = await Assert.ThrowsAsync<ArgumentException>(() => runtime.RememberAsync(
+                "Adopt the new policy.", "Decision", .8d, .9d, null, CancellationToken.None));
+
+            Assert.Equal("memoryType", error.ParamName);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
+    }
 }

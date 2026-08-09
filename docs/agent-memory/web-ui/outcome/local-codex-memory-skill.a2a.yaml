@@ -1,0 +1,28 @@
+schema: agent-memory-object/v1
+id: web-ui.outcome.local-codex-memory-skill
+kind: outcome
+area: web-ui
+status: completed
+title: Connected Codex local memory workflow with a low-token skill
+summary: The existing AgMemory stdio MCP registration is validated and a global Codex skill provides a bounded recall-first workflow.
+recorded: "2026-08-09"
+updated: "2026-08-09"
+tags: [web-ui, codex, mcp, memory, token-economy]
+sources:
+  - kind: code
+    ref: src/AgMemory.McpServer/AgMemoryTools.cs
+  - kind: code
+    ref: src/AgMemory.McpServer/LocalAgMemoryMcpRuntime.cs
+  - kind: test
+    ref: tests/AgMemory.McpServer.Tests/LocalAgMemoryMcpRuntimeTests.cs
+  - kind: configuration
+    ref: User-local Codex skill agmemory and enabled agmemory-local MCP registration
+  - kind: skill
+    ref: .agents/skills/agmemory/SKILL.md
+  - kind: skill
+    ref: .cursor/skills/agmemory/SKILL.md
+payload:
+  change: Validated the existing agmemory-local stdio server in Codex, added the agmemory skill globally and to the project Rider and Cursor paths, and made unsupported Decision writes fail early with a clear message.
+  measurement: `codex mcp list` reports agmemory-local enabled; Debug MCP build succeeds without warnings; three targeted MCP tests pass; all three skill copies pass structural validation and are byte-identical.
+  result: New Codex, Rider, and Cursor conversations can use the same fixed-scope memory workflow: bounded recall, one material-work artifact, and tagged personal or conversation conclusions.
+  next_action: Start a new conversation in each client; use `memory_status` only when a health or cross-client synchronization check is needed.

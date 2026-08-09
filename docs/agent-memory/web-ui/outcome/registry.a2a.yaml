@@ -27,3 +27,11 @@ objects:
     tags: [web-ui, macos, packaging, persistence, standalone]
     recorded: "2026-08-08"
     updated: "2026-08-08"
+  - id: web-ui.outcome.local-codex-memory-skill
+    title: Connected Codex local memory workflow with a low-token skill
+    status: completed
+    summary: The existing local MCP registration is validated, and Codex now has a compact AgMemory skill that minimizes recall and persistence calls.
+    path: local-codex-memory-skill.a2a.yaml
+    tags: [web-ui, codex, mcp, memory, token-economy]
+    recorded: "2026-08-09"
+    updated: "2026-08-09"

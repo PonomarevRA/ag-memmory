@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgMemory"
+  short_description: "Persist durable work outcomes"
+  default_prompt: "Use $agmemory to save the durable outcome of this task."
