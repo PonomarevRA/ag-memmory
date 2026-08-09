@@ -1,0 +1,27 @@
+schema: agent-memory-object/v1
+id: web-ui.decision.local-memory-status-diagnostics
+kind: decision
+area: web-ui
+status: approved
+title: Expose aggregate local memory state without exposing records
+summary: A loopback Development diagnostics page confirms the configured local memory store and exact scope with aggregate counts and freshness metadata only.
+recorded: "2026-08-09"
+updated: "2026-08-09"
+tags: [web-ui, diagnostics, memory, privacy, development]
+sources:
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryGraph/LocalMemoryGraphFeature.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryStatus/MemoryStatusEndpoint.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryStatus/MemoryStatusPage.razor
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/MemoryGraphEndpointTests.cs
+payload:
+  problem: A user working through chat, the graph, and multiple local agents could not verify whether the configured memory store was reachable or whether saved records were eligible for recall.
+  decision: Add a same-origin `/memory-status` endpoint and page guarded by the existing configured, Development, loopback policy. It reads the same LanceDB path and server-owned exact scope as the local graph, then returns only total, active, expired and inactive counts, active type counts, and latest-update time.
+  rationale: Aggregate diagnostics give a direct operational signal without exposing memory text, entities, durable IDs, actor values, or scope values to the browser.
+  consequences:
+    - An empty but available store is distinguishable from unavailable configuration or storage.
+    - `memory_status` in the local MCP server can be compared with the UI's active-memory count when both integrations use the same configured storage path and exact scope.
+    - The diagnostics route remains local-development-only; production requires an authenticated authorization model.

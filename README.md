@@ -57,6 +57,16 @@ environment — they are not tool inputs. Start a new Codex conversation after r
 to use `memory_status`, then `memory_remember` and `memory_recall` to test durable memory. This local
 development bridge must not be used as a production authorization model.
 
+### Local Memory Status
+
+Страница `/memory-status` показывает, отвечает ли то же локальное хранилище, что используют чат и граф,
+и сводку для его exact scope: общее число записей, доступные для recall active memory, истекшие и
+неактивные записи, время последнего обновления и распределение active memory по типам. Используйте
+«Обновить» после сохранения memory агентом. Если `/memory-status` показывает доступное хранилище и
+ожидаемый счётчик, а MCP-инструмент `memory_status` возвращает то же число active memory, агент и UI
+работают с одной настроенной памятью. Страница не передаёт в браузер текст записей, scope, actor,
+сущности или постоянные идентификаторы.
+
 ### Local Memory Graph
 
 Страница `/memory-graph` — локальная диагностическая визуализация. Настройте её только через

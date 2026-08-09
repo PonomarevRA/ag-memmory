@@ -1,7 +1,9 @@
 using System.Net;
 using System.Reflection;
 using System.Text.Json;
+using AgMemory.Web.Features.Chat;
 using AgMemory.Web.Features.MemoryGraph;
+using AgMemory.Web.Features.MemoryStatus;
 using AgMemory.Web.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -142,6 +144,66 @@ public sealed class MemoryGraphEndpointTests
     }
 
     [Fact]
+    public async Task ConfiguredFeature_ReadsAggregateStatusFromTheSharedConfiguredScope()
+    {
+        var root = TemporaryPath();
+        try
+        {
+            Directory.CreateDirectory(root);
+            var options = ConfiguredOptions();
+            await using (var writer = new LocalChatMemoryFeature(options, root))
+            {
+                await writer.RememberAsync("status-thread", "user", "First status marker", default);
+                await writer.RememberAsync("status-thread", "assistant", "Second status marker", default);
+            }
+            await using var feature = new LocalMemoryGraphFeature(options, root);
+
+            var status = await feature.ReadStatusAsync(default);
+
+            Assert.Equal(2, status.TotalMemoryCount);
+            Assert.Equal(2, status.ActiveMemoryCount);
+            Assert.Equal(0, status.ExpiredMemoryCount);
+            Assert.Equal(0, status.InactiveMemoryCount);
+            Assert.NotNull(status.LatestUpdateAt);
+            var eventCount = Assert.Single(status.ActiveByType);
+            Assert.Equal(AgMemory.Contracts.MemoryRecordType.Event, eventCount.Type);
+            Assert.Equal(2, eventCount.Count);
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public async Task UnconfiguredStatusEndpoint_ReturnsSafeUnavailableResponseWithoutCreatingAStore()
+    {
+        var root = TemporaryPath();
+        try
+        {
+            await using var feature = new LocalMemoryGraphFeature(new MemoryGraphHostOptions(), root);
+            var context = Context(IPAddress.Loopback);
+
+            var result = await MemoryStatusEndpoint.HandleAsync(
+                context,
+                new TestHostEnvironment(isDevelopment: true, root),
+                feature,
+                default);
+            var response = await ExecuteStatusAsync(result, context);
+
+            Assert.Equal("no-store", context.Response.Headers.CacheControl.ToString());
+            Assert.Equal("unavailable", response.Status);
+            Assert.Equal(0, response.TotalMemoryCount);
+            Assert.Empty(response.ActiveByType);
+            Assert.False(Directory.Exists(root));
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
     public async Task ConfiguredFeature_DefaultsStorageToThePersistentApplicationDirectory()
     {
         var root = TemporaryPath();
@@ -222,6 +284,17 @@ public sealed class MemoryGraphEndpointTests
     }
 
     [Fact]
+    public void StatusBrowserDtos_ExcludeMemoryContentAndAuthorityValues()
+    {
+        var properties = typeof(MemoryStatusApiResponse).GetProperties()
+            .Concat(typeof(MemoryStatusTypeCountDto).GetProperties());
+        var prohibited = new[] { "Actor", "Scope", "MemoryId", "Record", "Canonical", "Entity", "Error", "Provenance", "Content" };
+
+        Assert.All(properties, property =>
+            Assert.DoesNotContain(prohibited, token => property.Name.Contains(token, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
     public void Endpoint_AcceptsNoBrowserSuppliedActorOrScope()
     {
         var handler = typeof(MemoryGraphEndpoint).GetMethod(nameof(MemoryGraphEndpoint.HandleAsync), BindingFlags.Public | BindingFlags.Static)!;
@@ -232,6 +305,19 @@ public sealed class MemoryGraphEndpointTests
             type.Name.Contains("Actor", StringComparison.OrdinalIgnoreCase) ||
             type.Name.Contains("Scope", StringComparison.OrdinalIgnoreCase) ||
             type.Name.Contains("MemoryGraphRequest", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void StatusEndpoint_AcceptsNoBrowserSuppliedActorOrScope()
+    {
+        var handler = typeof(MemoryStatusEndpoint).GetMethod(nameof(MemoryStatusEndpoint.HandleAsync), BindingFlags.Public | BindingFlags.Static)!;
+        var parameterTypes = handler.GetParameters().Select(parameter => parameter.ParameterType).ToArray();
+
+        Assert.Equal("/api/memory-status", MemoryStatusEndpoint.Route);
+        Assert.DoesNotContain(parameterTypes, type =>
+            type.Name.Contains("Actor", StringComparison.OrdinalIgnoreCase) ||
+            type.Name.Contains("Scope", StringComparison.OrdinalIgnoreCase) ||
+            type.Name.Contains("MemoryStatus", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -258,8 +344,9 @@ public sealed class MemoryGraphEndpointTests
         }
     }
 
-    private static LocalMemoryGraphFeature ConfiguredFeature(string root) => new(
-        new MemoryGraphHostOptions
+    private static LocalMemoryGraphFeature ConfiguredFeature(string root) => new(ConfiguredOptions(), root);
+
+    private static MemoryGraphHostOptions ConfiguredOptions() => new()
         {
             Enabled = true,
             StoragePath = "lancedb",
@@ -272,8 +359,7 @@ public sealed class MemoryGraphEndpointTests
                 ChatId = "local-chat",
                 RunId = "local-run"
             }
-        },
-        root);
+        };
 
     private static DefaultHttpContext Context(IPAddress address)
     {
@@ -288,6 +374,15 @@ public sealed class MemoryGraphEndpointTests
         await result.ExecuteAsync(context);
         context.Response.Body.Position = 0;
         return (await JsonSerializer.DeserializeAsync<MemoryGraphApiResponse>(
+            context.Response.Body,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)))!;
+    }
+
+    private static async Task<MemoryStatusApiResponse> ExecuteStatusAsync(IResult result, HttpContext context)
+    {
+        await result.ExecuteAsync(context);
+        context.Response.Body.Position = 0;
+        return (await JsonSerializer.DeserializeAsync<MemoryStatusApiResponse>(
             context.Response.Body,
             new JsonSerializerOptions(JsonSerializerDefaults.Web)))!;
     }

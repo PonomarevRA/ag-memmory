@@ -1,0 +1,129 @@
+@page "/memory-status"
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<PageTitle>Состояние памяти · AgMemory</PageTitle>
+
+<section class="memory-status-page">
+    <header class="page-header">
+        <p class="eyebrow">Локальная диагностика</p>
+        <h1>Состояние памяти</h1>
+        <p>Проверьте, что та же локальная память, которую используют чат, граф и подключённые агенты с совпадающим scope, доступна и содержит актуальные записи.</p>
+    </header>
+
+    @if (_loading)
+    {
+        <UiStatusBanner Kind="UiStatusKind.Info" Title="Проверяем память">
+            Читаем безопасную агрегированную сводку из локального хранилища.
+        </UiStatusBanner>
+    }
+    else if (!IsAvailable)
+    {
+        <UiStatusBanner Kind="UiStatusKind.Warning" Title="Состояние памяти недоступно">
+            Диагностика доступна только из loopback в Development при явно настроенном локальном scope.
+        </UiStatusBanner>
+    }
+    else
+    {
+        <UiStatusBanner Kind="UiStatusKind.Success" Title="Локальная память доступна">
+            Хранилище отвечает для настроенного exact scope. Обновлено: @FormatTimestamp(_status!.LatestUpdateAt).
+        </UiStatusBanner>
+
+        <div class="memory-status-toolbar">
+            <button class="ui-button ui-button--secondary" type="button" @onclick="LoadAsync" disabled="@_loading">Обновить</button>
+            <span aria-live="polite">Проверено: @FormatTimestamp(_checkedAt)</span>
+        </div>
+
+        <section class="memory-status-grid" aria-label="Агрегированное состояние памяти">
+            <article class="memory-status-metric">
+                <p>Всего записей</p>
+                <strong>@_status!.TotalMemoryCount</strong>
+                <span>в настроенном scope</span>
+            </article>
+            <article class="memory-status-metric">
+                <p>Доступны для recall</p>
+                <strong>@_status!.ActiveMemoryCount</strong>
+                <span>active и неистекшие</span>
+            </article>
+            <article class="memory-status-metric">
+                <p>Истекли</p>
+                <strong>@_status!.ExpiredMemoryCount</strong>
+                <span>не попадут в recall</span>
+            </article>
+            <article class="memory-status-metric">
+                <p>Неактивны</p>
+                <strong>@_status!.InactiveMemoryCount</strong>
+                <span>draft, superseded или invalid</span>
+            </article>
+        </section>
+
+        @if (_status!.TotalMemoryCount == 0)
+        {
+            <UiStatusBanner Kind="UiStatusKind.Info" Title="Хранилище пустое">
+                Подключение работает, но для этого scope ещё нет записей. Сохраните memory через агента или отправьте сообщение в локальный чат.
+            </UiStatusBanner>
+        }
+        else
+        {
+            <section class="memory-status-breakdown" aria-labelledby="memory-status-type-title">
+                <h2 id="memory-status-type-title">Активные записи по типу</h2>
+                @if (_status!.ActiveByType.Count == 0)
+                {
+                    <p>Нет активных неистекших записей.</p>
+                }
+                else
+                {
+                    <ul>
+                        @foreach (var item in _status.ActiveByType)
+                        {
+                            <li><span>@item.Type</span><strong>@item.Count</strong></li>
+                        }
+                    </ul>
+                }
+            </section>
+        }
+
+        <p class="small-copy">Для защиты данных страница не показывает текст записей, scope, actor, сущности или постоянные идентификаторы.</p>
+    }
+</section>
+
+@code {
+    private MemoryStatusInterop? _interop;
+    private MemoryStatusApiResponse? _status;
+    private bool _loading = true;
+    private DateTimeOffset? _checkedAt;
+
+    private bool IsAvailable => string.Equals(_status?.Status, "available", StringComparison.Ordinal);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        _interop = new(JS);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_interop is null)
+            return;
+
+        _loading = true;
+        await InvokeAsync(StateHasChanged);
+        _status = await _interop.LoadAsync();
+        _checkedAt = DateTimeOffset.UtcNow;
+        _loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string FormatTimestamp(DateTimeOffset? value) => value is null
+        ? "ещё не было записей"
+        : value.Value.ToUniversalTime().ToString("yyyy-MM-dd HH:mm 'UTC'");
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_interop is not null)
+            await _interop.DisposeAsync();
+    }
+}

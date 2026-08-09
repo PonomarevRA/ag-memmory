@@ -27,3 +27,11 @@ objects:
     tags: [web-ui, codex, mcp, memory, development]
     recorded: "2026-08-09"
     updated: "2026-08-09"
+  - id: web-ui.decision.local-memory-status-diagnostics
+    title: Expose aggregate local memory state without exposing records
+    status: approved
+    summary: The local UI can confirm a configured store and exact scope through safe aggregate counts and freshness metadata.
+    path: local-memory-status-diagnostics.a2a.yaml
+    tags: [web-ui, diagnostics, memory, privacy, development]
+    recorded: "2026-08-09"
+    updated: "2026-08-09"

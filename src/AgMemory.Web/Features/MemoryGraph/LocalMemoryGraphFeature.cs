@@ -37,6 +37,33 @@ public sealed class LocalMemoryGraphFeature : IAsyncDisposable
             ContractVersion), cancellationToken);
     }
 
+    /// <summary>Reads safe aggregate diagnostics from the same configured local store and exact scope as the graph.</summary>
+    public async Task<LocalMemoryStatusSnapshot> ReadStatusAsync(CancellationToken cancellationToken)
+    {
+        var configuration = _configuration ?? throw new InvalidOperationException("The local memory status is unavailable.");
+        var records = await GetOrCreateStore(configuration)
+            .ListAsync(new AuthorizedScopeSet([new ScopeSelector(configuration.Scope)]), cancellationToken)
+            .ConfigureAwait(false);
+        var now = DateTimeOffset.UtcNow;
+        var activeRecords = records
+            .Where(record => record.Status == MemoryLifecycleStatus.Active && (record.ExpiresAt is null || record.ExpiresAt > now))
+            .ToArray();
+        var byType = activeRecords
+            .GroupBy(record => record.Type)
+            .OrderBy(group => group.Key.ToString(), StringComparer.Ordinal)
+            .Select(group => new LocalMemoryTypeCount(group.Key, group.Count()))
+            .ToArray();
+        var expiredCount = records.Count(record => record.Status == MemoryLifecycleStatus.Active && record.ExpiresAt is not null && record.ExpiresAt <= now);
+
+        return new(
+            records.Count,
+            activeRecords.Length,
+            expiredCount,
+            records.Count - activeRecords.Length - expiredCount,
+            records.Count == 0 ? null : records.Max(record => record.UpdatedAt),
+            byType);
+    }
+
     public async ValueTask DisposeAsync()
     {
         LanceDbMemoryStore? store;
@@ -58,7 +85,7 @@ public sealed class LocalMemoryGraphFeature : IAsyncDisposable
             if (_query is not null)
                 return _query;
 
-            _store = new LanceDbMemoryStore(new(configuration.StoragePath));
+            _store ??= new LanceDbMemoryStore(new(configuration.StoragePath));
             _query = new MemoryGraphQueryService(
                 _store,
                 new ExactLocalGraphAuthorization(configuration),
@@ -66,6 +93,12 @@ public sealed class LocalMemoryGraphFeature : IAsyncDisposable
                 ContractVersion);
             return _query;
         }
+    }
+
+    private LanceDbMemoryStore GetOrCreateStore(MemoryGraphHostConfiguration configuration)
+    {
+        lock (_sync)
+            return _store ??= new LanceDbMemoryStore(new(configuration.StoragePath));
     }
 
     private sealed class SystemClock : IClock
@@ -87,3 +120,14 @@ public sealed class LocalMemoryGraphFeature : IAsyncDisposable
                 : ScopeAuthorizationResult.Denied(MemoryErrorCode.Unauthorized, "local-graph-v1"));
     }
 }
+
+/// <summary>Server-side aggregate diagnostics. It deliberately contains no text, scope, actor or durable identifier.</summary>
+public sealed record LocalMemoryStatusSnapshot(
+    int TotalMemoryCount,
+    int ActiveMemoryCount,
+    int ExpiredMemoryCount,
+    int InactiveMemoryCount,
+    DateTimeOffset? LatestUpdateAt,
+    IReadOnlyList<LocalMemoryTypeCount> ActiveByType);
+
+public sealed record LocalMemoryTypeCount(MemoryRecordType Type, int Count);

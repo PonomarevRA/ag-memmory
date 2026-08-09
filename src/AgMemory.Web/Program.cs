@@ -1,6 +1,7 @@
 using AgMemory.Web.Components;
 using AgMemory.Web.Features.Chat;
 using AgMemory.Web.Features.MemoryGraph;
+using AgMemory.Web.Features.MemoryStatus;
 using AgMemory.Web.Features.Navigation;
 using AgMemory.Web.Gateway;
 using AgMemory.Web.Hosting;
@@ -69,6 +70,7 @@ app.MapStaticAssets();
 app.MapPost(ChatEndpoint.Route, ChatEndpoint.HandleAsync)
     .RequireRateLimiting(ChatEndpoint.RateLimitPolicy);
 app.MapGet(MemoryGraphEndpoint.Route, MemoryGraphEndpoint.HandleAsync);
+app.MapGet(MemoryStatusEndpoint.Route, MemoryStatusEndpoint.HandleAsync);
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
