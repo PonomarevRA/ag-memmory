@@ -70,6 +70,15 @@ public sealed partial class LanceDbMemoryStore
         ], rows.Length);
     }
 
+    private static RecordBatch BuildReaderRouteBatch(IReadOnlyCollection<PersistedReaderRouteRow> routes)
+    {
+        return new RecordBatch(CreateReaderRouteSchema(),
+        [
+            Strings(routes.Select(route => route.RouteKey)),
+            Strings(routes.Select(route => route.MemoryId))
+        ], routes.Count);
+    }
+
     private static RecordBatch BuildSchemaManifestBatch(IReadOnlyCollection<PersistedSchemaManifestRow> entries)
     {
         if (entries.Count == 0) throw new ArgumentException("A schema manifest batch cannot be empty.", nameof(entries));

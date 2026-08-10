@@ -1,0 +1,155 @@
+@page "/memory-reader"
+@page "/memory-reader/{RouteKey}"
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<PageTitle>Читать память · AgMemory</PageTitle>
+
+<section class="memory-reader-page">
+    <header class="page-header">
+        <p class="eyebrow">Локальная wiki-память</p>
+        <h1>Читать память</h1>
+        <p>Документ открыт в явно настроенном локальном scope. Переходы по ссылкам проверяются сервером заново.</p>
+    </header>
+
+    @if (_loading)
+    {
+        <UiStatusBanner Kind="UiStatusKind.Info" Title="Загрузка документа">
+            Читаем следующую ограниченную часть локальной памяти.
+        </UiStatusBanner>
+    }
+    else if (_reader is null || _reader.Status == "unavailable")
+    {
+        <UiStatusBanner Kind="UiStatusKind.Warning" Title="Reader недоступен">
+            Для чтения нужен Development loopback и явно настроенный home document в локальном exact scope.
+        </UiStatusBanner>
+    }
+    else if (_reader.Status == "not-found")
+    {
+        <UiStatusBanner Kind="UiStatusKind.Warning" Title="Документ недоступен">
+            Запись отсутствует, больше не active, истекла или не входит в настроенный scope.
+        </UiStatusBanner>
+    }
+    else if (_reader.Status == "stale")
+    {
+        <UiStatusBanner Kind="UiStatusKind.Warning" Title="Ссылка устарела">
+            Навигационное состояние больше нельзя проверить. Откройте home document заново.
+            <button class="inline-action" type="button" @onclick="RestartAsync">Открыть заново</button>
+        </UiStatusBanner>
+    }
+    else if (_reader.Status == "changed")
+    {
+        <UiStatusBanner Kind="UiStatusKind.Info" Title="Документ изменился">
+            Следующая часть относится к другой версии документа.
+            <button class="inline-action" type="button" @onclick="ReloadDocumentAsync">Перезагрузить документ</button>
+        </UiStatusBanner>
+    }
+    else if (_reader.Status == "available")
+    {
+        @if (_reader.Blocks.Count == 0)
+        {
+            <UiEmptyState Icon="◌" Title="В документе пока нет блоков" Description="Подходящая запись открыта, но в ней нет отображаемого текста." />
+        }
+        else
+        {
+            <article class="memory-reader-document" aria-live="polite">
+                @foreach (var block in _reader.Blocks)
+                {
+                    <section class="memory-reader-block" @key="block.Id" id="@block.Id">
+                        @if (!string.IsNullOrWhiteSpace(block.Heading))
+                        {
+                            <h2>@block.Heading</h2>
+                        }
+                        <p class="memory-reader-block__content">
+                            @foreach (var inline in block.Content)
+                            {
+                                if (inline.Kind == "link" && inline.RouteKey is not null && inline.BlockToken is not null)
+                                {
+                                    <a href="@HrefFor(inline.RouteKey, inline.BlockToken)">@inline.Text</a>
+                                }
+                                else
+                                {
+                                    <span>@inline.Text</span>
+                                }
+                            }
+                        </p>
+                    </section>
+                }
+            </article>
+
+            @if (!string.IsNullOrWhiteSpace(_reader.NextBlockToken) && _reader.RouteKey is not null)
+            {
+                <div class="memory-reader-actions">
+                    <button class="ui-button" type="button" @onclick="ReadMoreAsync">Читать следующую часть</button>
+                </div>
+            }
+        }
+    }
+</section>
+
+@code {
+    [Parameter] public string? RouteKey { get; set; }
+    [SupplyParameterFromQuery(Name = "block")] public string? BlockToken { get; set; }
+
+    private MemoryReaderInterop? _interop;
+    private MemoryReaderApiResponse? _reader;
+    private string? _requestedRouteKey;
+    private string? _requestedBlockToken;
+    private bool _loading = true;
+    private bool _loadRequested = true;
+
+    protected override void OnParametersSet()
+    {
+        if (_requestedRouteKey == RouteKey && _requestedBlockToken == BlockToken) return;
+        _requestedRouteKey = RouteKey;
+        _requestedBlockToken = BlockToken;
+        _loadRequested = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            _interop = new(JS);
+        if (!_loadRequested || _interop is null) return;
+
+        _loadRequested = false;
+        await LoadAsync(_requestedRouteKey, _requestedBlockToken);
+    }
+
+    private async Task ReadMoreAsync()
+    {
+        if (_reader?.RouteKey is not { } routeKey || _reader.NextBlockToken is not { } token) return;
+        await LoadAsync(routeKey, token);
+    }
+
+    private async Task RestartAsync() => await LoadAsync(null, null);
+
+    private async Task ReloadDocumentAsync()
+    {
+        if (_requestedRouteKey is null)
+        {
+            await RestartAsync();
+            return;
+        }
+        await LoadAsync(_requestedRouteKey, null);
+    }
+
+    private async Task LoadAsync(string? routeKey, string? token)
+    {
+        if (_interop is null) return;
+        _loading = true;
+        await InvokeAsync(StateHasChanged);
+        _reader = await _interop.LoadAsync(routeKey, token);
+        _loading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string HrefFor(string routeKey, string blockToken) =>
+        $"/memory-reader/{Uri.EscapeDataString(routeKey)}?block={Uri.EscapeDataString(blockToken)}";
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_interop is not null)
+            await _interop.DisposeAsync();
+    }
+}

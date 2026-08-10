@@ -142,6 +142,12 @@ p { margin-bottom: var(--space-4); }
 
 .memory-graph-page { max-width: 74rem; }
 .memory-status-page { max-width: 64rem; }
+.memory-reader-page { max-width: 54rem; }
+.memory-reader-document { display: grid; gap: var(--space-4); }
+.memory-reader-block { padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); box-shadow: var(--shadow); scroll-margin-top: 6rem; }
+.memory-reader-block h2 { margin-bottom: var(--space-3); }
+.memory-reader-block__content { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memory-reader-actions { display: flex; justify-content: center; margin-top: var(--space-5); }
 .memory-status-toolbar { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-5) 0; color: var(--text-muted); font-size: 0.9375rem; }
 .memory-status-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin: var(--space-5) 0; }
 .memory-status-metric { display: grid; gap: var(--space-1); min-height: 10rem; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); box-shadow: var(--shadow); }

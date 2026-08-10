@@ -3,6 +3,7 @@ using Apache.Arrow.Types;
 using AgMemory.Contracts;
 using AgMemory.Storage.LanceDb;
 using lancedb;
+using System.Reflection;
 using Xunit;
 
 namespace AgMemory.Storage.LanceDb.Tests;
@@ -446,6 +447,83 @@ public sealed class LanceDbMemoryStoreIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task ReaderSource_ReadsOnlyTheExactActiveNonExpiredRecordAndInitializesItsRouteTable()
+    {
+        var path = TemporaryPath();
+        try
+        {
+            await using var store = new LanceDbMemoryStore(new(path));
+            var eligible = Record("reader-home", ScopeA, "# Home ^home\nreader text", [1f, 0f, 0f]);
+            var foreign = Record("reader-foreign", ScopeB, "foreign", [0f, 1f, 0f]);
+            var inactive = Record("reader-inactive", ScopeA, "inactive", [0f, 0f, 1f]) with { Status = MemoryLifecycleStatus.Invalid };
+            var expired = Record("reader-expired", ScopeA, "expired", [1f, 1f, 0f]) with { ExpiresAt = Now };
+            await WriteAsync(store, Authorized(ScopeA, ScopeB), [eligible, foreign, inactive, expired]);
+
+            var eligibility = new MemorySearchEligibility(Authorized(ScopeA), null, Now);
+            var result = await store.ReadByIdAsync(eligibility, eligible.Id, default);
+
+            Assert.NotNull(result);
+            Assert.Equal(eligible.Id, result!.MemoryId);
+            Assert.Equal(eligible.CanonicalText, result.CanonicalText);
+            Assert.Null(await store.ReadByIdAsync(eligibility, foreign.Id, default));
+            Assert.Null(await store.ReadByIdAsync(eligibility, inactive.Id, default));
+            Assert.Null(await store.ReadByIdAsync(eligibility, expired.Id, default));
+
+            var routeTable = Assert.Single((await store.GetSchemaManifestAsync()).Tables,
+                table => table.TableName == "memory_reader_routes");
+            Assert.Equal(["route_key", "memory_id"], routeTable.Fields.Select(field => field.Name).ToArray());
+        }
+        finally
+        {
+            DeleteTemporaryPath(path);
+        }
+    }
+
+    [Fact]
+    public async Task ReaderRouteMap_PersistsAcrossReopenButDoesNotExpandExactScopeReads()
+    {
+        var path = TemporaryPath();
+        try
+        {
+            var home = Record("reader-home", ScopeA, "home", [1f, 0f, 0f]);
+            MemoryReaderRoute route;
+            await using (var store = new LanceDbMemoryStore(new(path)))
+            {
+                await WriteAsync(store, Authorized(ScopeA), [home]);
+                route = await store.GetOrCreateRouteAsync(home.Id, default);
+
+                Assert.NotEqual(home.Id.Value, route.RouteKey);
+                Assert.Equal(home.Id, await store.ResolveRouteAsync(route.RouteKey, default));
+            }
+
+            await using var reopened = new LanceDbMemoryStore(new(path));
+            Assert.Equal(home.Id, await reopened.ResolveRouteAsync(route.RouteKey, default));
+            var foreignEligibility = new MemorySearchEligibility(Authorized(ScopeB), null, Now);
+            Assert.Null(await reopened.ReadByIdAsync(foreignEligibility, home.Id, default));
+        }
+        finally
+        {
+            DeleteTemporaryPath(path);
+        }
+    }
+
+    [Fact]
+    public void ReaderAdapter_UsesASelectedDirectLookupInsteadOfGeneralMaterialization()
+    {
+        var source = Read("src/AgMemory.Storage.LanceDb/Reader/LanceDbMemoryStore.MemoryReader.cs");
+        var projection = (string[])typeof(LanceDbMemoryStore)
+            .GetField("ReaderSourceColumnNames", BindingFlags.Static | BindingFlags.NonPublic)!
+            .GetValue(null)!;
+
+        Assert.Contains(".Select(ReaderSourceColumnNames)", source, StringComparison.Ordinal);
+        Assert.Contains(".Where(predicate)", source, StringComparison.Ordinal);
+        Assert.Contains(".Limit(2)", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ListAsync(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReadMemoryRecords(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(projection, column => column.Contains("embedding", StringComparison.OrdinalIgnoreCase));
+    }
+
     private static async Task WriteAsync(LanceDbMemoryStore store, AuthorizedScopeSet scopes, IReadOnlyList<MemoryRecord> records)
     {
         await using var transaction = await store.BeginTransactionAsync(default);
@@ -476,6 +554,23 @@ public sealed class LanceDbMemoryStoreIntegrationTests
     }
 
     private static string TemporaryPath() => Path.Combine(Path.GetTempPath(), $"agmemory-lancedb-tests-{Guid.NewGuid():N}");
+
+    private static string Read(string relativePath) => File.ReadAllText(Path.Combine(RepositoryRoot, relativePath));
+
+    private static string RepositoryRoot
+    {
+        get
+        {
+            var current = new DirectoryInfo(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!);
+            while (current is not null)
+            {
+                if (File.Exists(Path.Combine(current.FullName, "ag-memory.slnx"))) return current.FullName;
+                current = current.Parent;
+            }
+
+            throw new InvalidOperationException("Unable to find the repository root for reader adapter verification.");
+        }
+    }
 
     private static void DeleteTemporaryPath(string path)
     {

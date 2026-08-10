@@ -1,10 +1,12 @@
 using AgMemory.Web.Components;
 using AgMemory.Web.Features.Chat;
 using AgMemory.Web.Features.MemoryGraph;
+using AgMemory.Web.Features.MemoryReader;
 using AgMemory.Web.Features.MemoryStatus;
 using AgMemory.Web.Features.Navigation;
 using AgMemory.Web.Gateway;
 using AgMemory.Web.Hosting;
+using Microsoft.AspNetCore.DataProtection;
 using System.Threading.RateLimiting;
 
 var desktopHost = MacDesktopHost.Detect();
@@ -23,6 +25,8 @@ builder.Configuration
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(applicationDataDirectory, "data-protection")));
 builder.Services.AddAntiforgery();
 builder.Services.AddRateLimiter(options =>
 {
@@ -45,13 +49,22 @@ builder.Services.AddHttpClient(OpenAiCompatibleChatGateway.HttpClientName, clien
 builder.Services.AddSingleton<IModelChatGateway, OpenAiCompatibleChatGateway>();
 builder.Services.AddScoped<BrowserStateInterop>();
 var memoryGraphOptions = builder.Configuration.GetSection(MemoryGraphHostOptions.SectionName).Get<MemoryGraphHostOptions>() ?? new();
+var memoryReaderOptions = builder.Configuration.GetSection(MemoryReaderHostOptions.SectionName).Get<MemoryReaderHostOptions>() ?? new();
 builder.Services.AddSingleton(new LocalMemoryGraphFeature(memoryGraphOptions, applicationDataDirectory));
 builder.Services.AddSingleton(new LocalChatMemoryFeature(memoryGraphOptions, applicationDataDirectory));
+builder.Services.AddSingleton<LocalMemoryReaderFeature>(services => new(
+    memoryReaderOptions,
+    applicationDataDirectory,
+    services.GetRequiredService<IDataProtectionProvider>()));
 
 var app = builder.Build();
 app.Logger.LogInformation(
     "Local memory graph composition: configured={Configured}; development={IsDevelopment}",
     memoryGraphOptions.TryCreate(applicationDataDirectory) is not null,
+    app.Environment.IsDevelopment());
+app.Logger.LogInformation(
+    "Local memory reader composition: configured={Configured}; development={IsDevelopment}",
+    memoryReaderOptions.TryCreate(applicationDataDirectory) is not null,
     app.Environment.IsDevelopment());
 
 if (!app.Environment.IsDevelopment())
@@ -71,6 +84,8 @@ app.MapPost(ChatEndpoint.Route, ChatEndpoint.HandleAsync)
     .RequireRateLimiting(ChatEndpoint.RateLimitPolicy);
 app.MapGet(MemoryGraphEndpoint.Route, MemoryGraphEndpoint.HandleAsync);
 app.MapGet(MemoryStatusEndpoint.Route, MemoryStatusEndpoint.HandleAsync);
+app.MapGet(MemoryReaderEndpoint.HomeRoute, MemoryReaderEndpoint.HandleHomeAsync);
+app.MapGet(MemoryReaderEndpoint.DocumentRoute, MemoryReaderEndpoint.HandleDocumentAsync);
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

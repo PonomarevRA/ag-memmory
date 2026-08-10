@@ -182,6 +182,12 @@ public sealed partial class LanceDbMemoryStore
             message.MemoryId, message.ContractVersion.Value);
     }
 
+    private sealed record PersistedReaderRouteRow(string RouteKey, string MemoryId)
+    {
+        public static PersistedReaderRouteRow Read(RecordBatch batch, int index) => new(
+            Required(batch, "route_key", index), Required(batch, "memory_id", index));
+    }
+
     private sealed record PersistedSchemaManifestRow(
         string TableName,
         string SchemaVersion,
@@ -281,6 +287,32 @@ public sealed partial class LanceDbMemoryStore
         ?? throw new InvalidDataException($"LanceDB JSON could not be converted to {typeof(T).Name}.");
     private static TEnum ParseEnum<TEnum>(string value) where TEnum : struct, Enum => Enum.TryParse<TEnum>(value, out var parsed)
         ? parsed : throw new InvalidDataException($"'{value}' is not a valid {typeof(TEnum).Name}.");
+
+    private static MemoryReaderSourceRecord ReaderRecord(RecordBatch batch, int index) => new(
+        new MemoryId(Required(batch, "id", index)),
+        new MemoryScope(
+            new ScopeId(Required(batch, "tenant_id", index)),
+            ToScopeId(Value(batch, "project_id", index)),
+            ToScopeId(Value(batch, "workspace_id", index)),
+            ToScopeId(Value(batch, "chat_id", index)),
+            ToScopeId(Value(batch, "run_id", index))),
+        ParseEnum<MemoryRecordType>(Required(batch, "record_type", index)),
+        ParseEnum<MemoryLifecycleStatus>(Required(batch, "status", index)),
+        Required(batch, "canonical_text", index),
+        ParseUtc(Required(batch, "created_at_utc", index)),
+        ParseUtc(Required(batch, "updated_at_utc", index)),
+        long.Parse(Required(batch, "version", index), CultureInfo.InvariantCulture),
+        Value(batch, "expires_at_utc", index) is { } expires ? ParseUtc(expires) : null);
+
+    private static IEnumerable<MemoryReaderSourceRecord> ReadMemoryReaderSourceRecords(RecordBatch batch)
+    {
+        for (var index = 0; index < batch.Length; index++) yield return ReaderRecord(batch, index);
+    }
+
+    private static IEnumerable<PersistedReaderRouteRow> ReadReaderRouteRows(RecordBatch batch)
+    {
+        for (var index = 0; index < batch.Length; index++) yield return PersistedReaderRouteRow.Read(batch, index);
+    }
 
     private static float[]? TryReadVector(RecordBatch batch, int index)
     {

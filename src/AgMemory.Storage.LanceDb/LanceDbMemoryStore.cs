@@ -13,7 +13,7 @@ namespace AgMemory.Storage.LanceDb;
 /// Local LanceDB implementation of the provider-neutral durable-memory and search ports.
 /// LanceDB, Arrow schemas and SQL-like predicates are deliberately implementation details.
 /// </summary>
-public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSource, IVectorSearch, ILexicalSearch, IAsyncDisposable
+public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSource, IMemoryReaderSource, IVectorSearch, ILexicalSearch, IAsyncDisposable
 {
     /// <summary>The initial, fail-closed schema policy for tables owned by this adapter.</summary>
     public const string CurrentStorageSchemaVersion = "1.0";
@@ -22,6 +22,7 @@ public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSourc
     private const string HotMemoryTable = "session_hot_memory";
     private const string ReceiptsTable = "idempotency_receipts";
     private const string OutboxTable = "outbox_messages";
+    private const string ReaderRoutesTable = "memory_reader_routes";
     private const string SchemaManifestTable = "agmemory_schema_manifest";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] MemoryColumnNames =
@@ -35,6 +36,11 @@ public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSourc
     [
         "table_name", "schema_version", "schema_fingerprint", "embedding_provider", "embedding_model",
         "embedding_model_version", "embedding_dimension", "embedding_normalization"
+    ];
+    private static readonly string[] ReaderSourceColumnNames =
+    [
+        "id", "tenant_id", "project_id", "workspace_id", "chat_id", "run_id", "record_type", "status",
+        "canonical_text", "created_at_utc", "updated_at_utc", "version", "expires_at_utc"
     ];
 
     private readonly LanceDbMemoryStoreOptions _options;

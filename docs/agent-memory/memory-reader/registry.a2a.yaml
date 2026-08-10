@@ -1,0 +1,7 @@
+schema: agent-memory-area-registry/v1
+version: 1
+area: memory-reader
+kinds:
+  - kind: decision
+    summary: Reader serving and storage-capability decisions.
+    path: decision/registry.a2a.yaml

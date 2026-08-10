@@ -20,6 +20,12 @@ public interface IMemoryGraphQueryService
     Task<MemoryGraphSnapshot> ReadAsync(MemoryGraphRequest request, CancellationToken cancellationToken);
 }
 
+public interface IMemoryReaderQueryService
+{
+    Task<MemoryReaderDocumentPage> ReadHomeAsync(MemoryReaderHomeRequest request, CancellationToken cancellationToken);
+    Task<MemoryReaderDocumentPage> ReadDocumentAsync(MemoryReaderDocumentRequest request, CancellationToken cancellationToken);
+}
+
 public interface IHotMemoryService
 {
     Task<HotMemoryStateResult> UpdateAsync(UpdateHotMemoryStateCommand command, CancellationToken cancellationToken);
@@ -118,6 +124,24 @@ public interface IMemoryGraphSource
     Task<IReadOnlyList<MemoryGraphSourceRecord>> ReadAsync(
         MemoryGraphSourceRequest request,
         CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Provides the dedicated, bounded content projection used by the local reader. Every operation receives
+/// an exact eligible scope; it is deliberately separate from the unbounded <see cref="IMemoryStore.ListAsync"/>.
+/// </summary>
+public interface IMemoryReaderSource
+{
+    Task<MemoryReaderSourceRecord?> ReadByIdAsync(
+        MemorySearchEligibility eligibility,
+        MemoryId memoryId,
+        CancellationToken cancellationToken);
+
+    Task<MemoryReaderRoute> GetOrCreateRouteAsync(
+        MemoryId memoryId,
+        CancellationToken cancellationToken);
+
+    Task<MemoryId?> ResolveRouteAsync(string routeKey, CancellationToken cancellationToken);
 }
 
 public interface IMemoryStoreTransaction : IAsyncDisposable

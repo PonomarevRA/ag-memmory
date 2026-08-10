@@ -1,0 +1,25 @@
+schema: agent-memory-object/v1
+id: memory-reader.decision.home-document-lancedb-bound
+kind: decision
+area: memory-reader
+status: approved
+title: Use a configured home document for bounded LanceDB wiki reading
+summary: Avoid an unsafe all-memory index when the local LanceDB SDK cannot server-sort pages.
+recorded: "2026-08-10"
+updated: "2026-08-10"
+tags: [memory-reader, lancedb, bounds, links]
+sources:
+  - kind: code
+    ref: src/AgMemory.Storage.LanceDb/Reader/LanceDbMemoryStore.MemoryReader.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryReader/MemoryReaderHostOptions.cs
+  - kind: test
+    ref: tests/AgMemory.Storage.LanceDb.Tests/LanceDbMemoryStoreIntegrationTests.cs
+payload:
+  problem: LanceDB 2.5.0 lacks a supported server-side ordering API for a complete safe paged reader index.
+  decision: Read a server-configured HomeMemoryId by exact scope, with bounded blocks and explicit wiki links; omit the document catalogue.
+  rationale: Selected exact lookups with Where, Select and Limit avoid an in-memory scope scan while preserving incremental reading.
+  consequences:
+    - Reader configuration must supply a local home memory identifier.
+    - Full catalog browsing needs ordered storage support or a separately designed durable catalog.
+    - Public routes remain opaque locators and are re-authorized on every read.

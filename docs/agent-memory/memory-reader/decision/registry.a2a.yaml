@@ -1,0 +1,13 @@
+schema: agent-memory-kind-registry/v1
+version: 1
+area: memory-reader
+kind: decision
+objects:
+  - id: memory-reader.decision.home-document-lancedb-bound
+    title: Use a configured home document for bounded LanceDB wiki reading
+    status: approved
+    summary: Avoid an unsafe all-memory index when the local LanceDB SDK cannot server-sort pages.
+    path: home-document-lancedb-bound.a2a.yaml
+    tags: [memory-reader, lancedb, bounds, links]
+    recorded: "2026-08-10"
+    updated: "2026-08-10"

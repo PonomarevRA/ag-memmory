@@ -35,6 +35,7 @@ public sealed partial class LanceDbMemoryStore
         yield return new LanceDbTableSchemaDefinition(HotMemoryTable, CurrentStorageSchemaVersion, CreateHotMemorySchema());
         yield return new LanceDbTableSchemaDefinition(ReceiptsTable, CurrentStorageSchemaVersion, CreateReceiptSchema());
         yield return new LanceDbTableSchemaDefinition(OutboxTable, CurrentStorageSchemaVersion, CreateOutboxSchema());
+        yield return new LanceDbTableSchemaDefinition(ReaderRoutesTable, CurrentStorageSchemaVersion, CreateReaderRouteSchema());
     }
 
     private static LanceDbTableSchemaDefinition VectorTableDefinition(EmbeddingReference embedding)
@@ -63,6 +64,8 @@ public sealed partial class LanceDbMemoryStore
             return new LanceDbTableSchemaDefinition(ReceiptsTable, CurrentStorageSchemaVersion, CreateReceiptSchema());
         if (string.Equals(entry.TableName, OutboxTable, StringComparison.Ordinal))
             return new LanceDbTableSchemaDefinition(OutboxTable, CurrentStorageSchemaVersion, CreateOutboxSchema());
+        if (string.Equals(entry.TableName, ReaderRoutesTable, StringComparison.Ordinal))
+            return new LanceDbTableSchemaDefinition(ReaderRoutesTable, CurrentStorageSchemaVersion, CreateReaderRouteSchema());
 
         if (entry.Embedding is null || !entry.TableName.StartsWith("memory_vectors_", StringComparison.Ordinal))
         {
@@ -143,6 +146,11 @@ public sealed partial class LanceDbMemoryStore
         .Field(new Field("correlation_id", StringType.Default, nullable: false))
         .Field(new Field("memory_id", StringType.Default, nullable: true))
         .Field(new Field("contract_version", StringType.Default, nullable: false))
+        .Build();
+
+    private static Schema CreateReaderRouteSchema() => new Schema.Builder()
+        .Field(new Field("route_key", StringType.Default, nullable: false))
+        .Field(new Field("memory_id", StringType.Default, nullable: false))
         .Build();
 
     private static bool IsNullableMemoryColumn(string column) => column is
