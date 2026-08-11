@@ -11,7 +11,7 @@
         <p>Визуализация показывает только типы и агрегированные связи между memory. Текст memory, сущности, scope и постоянные идентификаторы не отправляются в браузер.</p>
     </header>
 
-    @if (_loading)
+    @if (_loading && _graph is null)
     {
         <UiStatusBanner Kind="UiStatusKind.Info" Title="Загрузка графа">
             Запрашивается ограниченный локальный снимок.
@@ -21,6 +21,7 @@
     {
         <UiStatusBanner Kind="UiStatusKind.Warning" Title="Граф памяти недоступен">
             Визуализация доступна только из loopback в Development при явно настроенном локальном scope.
+            <button class="ui-button ui-button--secondary" type="button" @onclick="LoadAsync">Повторить</button>
         </UiStatusBanner>
     }
     else if (_graph!.Nodes.Count == 0)
@@ -31,12 +32,16 @@
     }
     else
     {
-        <section class="memory-graph-card" aria-label="Интерактивная вселенная памяти">
+        <section class="memory-graph-card" aria-label="Интерактивная вселенная памяти" aria-busy="@_loading">
             <div class="memory-graph-toolbar" aria-label="Управление масштабом графа">
                 <button class="ui-button ui-button--secondary" type="button" @onclick="ZoomInAsync">Увеличить</button>
                 <button class="ui-button ui-button--secondary" type="button" @onclick="ZoomOutAsync">Уменьшить</button>
                 <button class="ui-button ui-button--ghost" type="button" @onclick="ResetAsync">Сбросить вид</button>
-                <button class="ui-button ui-button--ghost" type="button" @onclick="LoadAsync">Обновить</button>
+                <button class="ui-button ui-button--ghost" type="button" @onclick="LoadAsync" disabled="@_loading">Обновить</button>
+                @if (!string.IsNullOrWhiteSpace(_graph.NextToken))
+                {
+                    <button class="ui-button" type="button" @onclick="LoadMoreAsync" disabled="@_loading">Показать ещё 25</button>
+                }
             </div>
             <div class="memory-graph-stage">
                 <div class="memory-graph-scene">
@@ -46,6 +51,12 @@
                     <canvas @ref="_fallbackCanvas" class="memory-graph-canvas" hidden tabindex="-1" role="img" aria-hidden="true" aria-label="Совместимая двумерная карта графа памяти" aria-describedby="memory-graph-summary">
                         Ваш браузер не поддерживает canvas. Текстовое описание графа находится ниже.
                     </canvas>
+                    @if (_loading)
+                    {
+                        <div class="memory-graph-loading-overlay" role="status" aria-live="polite">
+                            Добавляется следующая порция графа.
+                        </div>
+                    }
                     <p id="memory-graph-scene-description" class="visually-hidden">Узлы можно выбирать касанием или щелчком. Перетаскивайте сцену для обзора, используйте колесо для масштаба. Клавиши стрелок, Q и E меняют положение камеры, плюс и минус меняют масштаб, Home или 0 возвращают исходный вид, Escape снимает выбор.</p>
                 </div>
                 <aside class="memory-graph-inspector" aria-label="Инспектор и легенда карты">
@@ -75,7 +86,7 @@
                 {
                     <li @key="node.Id">
                         <button class="memory-graph-summary__node" type="button" @onclick="() => SelectNodeAsync(node.Id)">
-                            <strong>@node.Label</strong> · @node.Type · степень @node.Degree · важность @node.ImportanceBand/5 · уверенность @node.ConfidenceBand/5
+                            <strong>@node.Type</strong> · степень @node.Degree · важность @node.ImportanceBand/5 · уверенность @node.ConfidenceBand/5
                         </button>
                     </li>
                 }
@@ -135,6 +146,18 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private async Task LoadMoreAsync()
+    {
+        if (_interop is null || _graph?.NextToken is not { } token) return;
+        _loading = true;
+        await InvokeAsync(StateHasChanged);
+        _graph = await _interop.LoadAsync(token);
+        _loading = false;
+        if (IsAvailable && _canvasInitialized)
+            await _interop.RenderAsync(_graph!, preserveView: true);
+        await InvokeAsync(StateHasChanged);
+    }
+
     private async Task ZoomInAsync()
     {
         if (_interop is not null)
@@ -159,7 +182,7 @@
             await _interop.SelectNodeAsync(id);
     }
 
-    private string LabelFor(string id) => _graph?.Nodes.FirstOrDefault(node => node.Id == id)?.Label ?? "Узел";
+    private string LabelFor(string id) => _graph?.Nodes.FirstOrDefault(node => node.Id == id)?.Type ?? "Узел";
 
     private static string EdgeKey(MemoryGraphEdgeDto edge) => $"{edge.SourceId}:{edge.TargetId}";
 

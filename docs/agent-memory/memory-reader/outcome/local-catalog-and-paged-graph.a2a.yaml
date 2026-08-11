@@ -1,0 +1,26 @@
+schema: agent-memory-object/v1
+id: memory-reader.outcome.local-catalog-and-paged-graph
+kind: outcome
+area: memory-reader
+status: completed
+title: Delivered scoped catalogue reader and incremental graph
+summary: Standalone now reads its exact local scope through ordered catalogue leaves and paged graph snapshots.
+recorded: "2026-08-10"
+updated: "2026-08-10"
+tags: [memory-reader, catalog, graph, lancedb, standalone]
+sources:
+  - kind: code
+    ref: src/AgMemory.Storage.LanceDb/Catalog/LanceDbMemoryStore.ReaderCatalog.cs
+  - kind: code
+    ref: src/AgMemory.Core/Reader/MemoryReaderCatalogQueryService.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor
+  - kind: test
+    ref: tests/AgMemory.Storage.LanceDb.Tests/LanceDbCatalogTraversalProofTests.cs
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/MemoryGraphUniverseAssetTests.cs
+payload:
+  change: Added ordered immutable catalogue generations with bounded external merge, opaque reader paging, and 25-to-150 graph portions with retained selection.
+  measurement: Release solution passed Contracts 21, Core 51, Storage 18, Web 53, Integration 2, MCP 3, and Compatibility 55.
+  result: The macOS loopback app served the configured exact-scope reader catalogue and opaque graph-to-reader navigation.
+  next_action: Add an isolated seeded browser host if automated 25-to-50 canvas interaction testing becomes necessary.

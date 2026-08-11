@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="AgMemory">
+  <defs>
+    <linearGradient id="field" x1="120" y1="80" x2="900" y2="940" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6574f5"/>
+      <stop offset="0.55" stop-color="#4755d6"/>
+      <stop offset="1" stop-color="#252d81"/>
+    </linearGradient>
+    <linearGradient id="card" x1="310" y1="240" x2="700" y2="700" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e5eaff"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="28" stdDeviation="26" flood-color="#101a5d" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <rect x="48" y="48" width="928" height="928" rx="224" fill="url(#field)"/>
+  <circle cx="211" cy="287" r="48" fill="#99f6e4" opacity="0.95"/>
+  <circle cx="795" cy="241" r="34" fill="#c4b5fd" opacity="0.95"/>
+  <circle cx="805" cy="715" r="53" fill="#67e8f9" opacity="0.95"/>
+  <path d="M248 301 355 362M760 260 678 348M758 687 674 634" fill="none" stroke="#d8dcff" stroke-width="22" stroke-linecap="round" opacity="0.78"/>
+  <g filter="url(#shadow)">
+    <rect x="260" y="284" width="504" height="458" rx="92" fill="url(#card)"/>
+    <rect x="338" y="368" width="348" height="68" rx="34" fill="#6574f5"/>
+    <rect x="338" y="480" width="270" height="38" rx="19" fill="#aeb8eb"/>
+    <rect x="338" y="550" width="226" height="38" rx="19" fill="#c8d0ef"/>
+    <rect x="338" y="620" width="306" height="38" rx="19" fill="#aeb8eb"/>
+  </g>
+  <g fill="#ffffff">
+    <circle cx="211" cy="287" r="15"/>
+    <circle cx="795" cy="241" r="12"/>
+    <circle cx="805" cy="715" r="16"/>
+  </g>
+</svg>

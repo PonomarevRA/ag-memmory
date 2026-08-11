@@ -5,3 +5,6 @@ kinds:
   - kind: decision
     summary: Reader serving and storage-capability decisions.
     path: decision/registry.a2a.yaml
+  - kind: outcome
+    summary: Delivered scoped catalogue reader and incremental graph capabilities.
+    path: outcome/registry.a2a.yaml

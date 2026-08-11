@@ -2,7 +2,7 @@ import { createMemoryGraphRenderer } from '/vendor/memory-graph-renderer.js';
 import { createMemoryUniverse } from '/vendor/memory-graph-universe.js';
 
 const ROUTE = '/api/memory-graph';
-const MAX_NODES = 75;
+const MAX_NODES = 150;
 const MAX_EDGES = 150;
 let universe;
 let fallbackRenderer;
@@ -12,16 +12,17 @@ let selectionSummary;
 let currentSnapshot;
 
 function unavailable() {
-    return { status: 'unavailable', nodes: [], edges: [] };
+    return { status: 'unavailable', nodes: [], edges: [], nextToken: null };
 }
 
 function safeNode(node) {
-    if (!node || typeof node.id !== 'string' || typeof node.label !== 'string' || typeof node.type !== 'string') return null;
-    if (node.id.length > 80 || node.label.length > 120 || node.type.length > 80) return null;
+    if (!node || typeof node.id !== 'string' || typeof node.href !== 'string' || typeof node.type !== 'string') return null;
+    if (node.id.length > 80 || node.href.length > 256 || node.type.length > 80 || !node.href.startsWith('/memory-reader/')) return null;
     if (![node.importanceBand, node.confidenceBand, node.degree].every(Number.isFinite)) return null;
     return {
         id: node.id,
-        label: node.label,
+        href: node.href,
+        label: node.type,
         type: node.type,
         importanceBand: Math.max(1, Math.min(5, Math.trunc(node.importanceBand))),
         confidenceBand: Math.max(1, Math.min(5, Math.trunc(node.confidenceBand))),
@@ -40,15 +41,7 @@ function safeResponse(payload) {
         nodes.push(node);
         if (nodes.length === MAX_NODES) break;
     }
-    // Opaque response IDs are deliberately renewed by the endpoint. A generic type/label ordinal
-    // is stable for a structurally identical ordered response and never exposes a durable ID.
-    const labelOrdinals = new Map();
-    for (const node of nodes) {
-        const stem = `${node.type}:${node.label}`;
-        const ordinal = labelOrdinals.get(stem) ?? 0;
-        labelOrdinals.set(stem, ordinal + 1);
-        node.layoutKey = `${stem}:${ordinal}`;
-    }
+    for (const node of nodes) node.layoutKey = node.id;
     const ids = new Set(nodes.map(node => node.id));
     const edges = [];
     const edgeKeys = new Set();
@@ -66,7 +59,7 @@ function safeResponse(payload) {
         });
         if (edges.length === MAX_EDGES) break;
     }
-    return { status: 'available', nodes, edges };
+    return { status: 'available', nodes, edges, nextToken: typeof payload.nextToken === 'string' && payload.nextToken.length <= 4096 ? payload.nextToken : null };
 }
 
 function showPrimary() {
@@ -92,14 +85,18 @@ function announceFallback() {
 function announceFallbackSelection(node) {
     if (!selectionSummary || !currentSnapshot) return;
     const neighborCount = currentSnapshot.edges.filter(edge => edge.sourceId === node.id || edge.targetId === node.id).length;
-    selectionSummary.textContent = `Выбран ${node.label}: тип ${node.type}, степень ${node.degree}, важность ${node.importanceBand} из 5, уверенность ${node.confidenceBand} из 5. Ближайших соседей: ${neighborCount}.`;
+    selectionSummary.replaceChildren(document.createTextNode(`Выбран ${node.label}: тип ${node.type}, степень ${node.degree}, важность ${node.importanceBand} из 5, уверенность ${node.confidenceBand} из 5. Ближайших соседей: ${neighborCount}. `));
+    const link = document.createElement('a');
+    link.href = node.href;
+    link.textContent = 'Открыть запись';
+    selectionSummary.append(link);
 }
 
 function activateFallback() {
     universe?.dispose();
     universe = undefined;
     showFallback();
-    fallbackRenderer ??= createMemoryGraphRenderer(fallbackCanvas);
+    fallbackRenderer ??= createMemoryGraphRenderer(fallbackCanvas, announceFallbackSelection);
     announceFallback();
     if (currentSnapshot?.status === 'available') fallbackRenderer.render(currentSnapshot);
 }
@@ -118,9 +115,10 @@ export function initialize(canvas, compatibilityCanvas, selectedSummary) {
     }
 }
 
-export async function load() {
+export async function load(token) {
     try {
-        const response = await fetch(ROUTE, { credentials: 'same-origin', cache: 'no-store' });
+        const route = typeof token === 'string' && token.length > 0 ? `${ROUTE}?continuation=${encodeURIComponent(token)}` : ROUTE;
+        const response = await fetch(route, { credentials: 'same-origin', cache: 'no-store' });
         if (!response.ok) return unavailable();
         return safeResponse(await response.json());
     } catch {
@@ -128,11 +126,11 @@ export async function load() {
     }
 }
 
-export function render(snapshot) {
+export function render(snapshot, preserveView = false) {
     currentSnapshot = safeResponse(snapshot);
     if (universe) {
         try {
-            universe.render(currentSnapshot);
+            universe.render(currentSnapshot, preserveView);
             return;
         } catch {
             // A later renderer failure gets the same safe fallback as initialization or context loss.
@@ -140,7 +138,7 @@ export function render(snapshot) {
             return;
         }
     }
-    fallbackRenderer?.render(currentSnapshot);
+    fallbackRenderer?.render(currentSnapshot, preserveView);
 }
 
 export function zoomIn() {
@@ -162,7 +160,7 @@ export function selectNode(responseLocalOpaqueId) {
     const node = currentSnapshot?.nodes.find(candidate => candidate.id === responseLocalOpaqueId);
     if (!node) return;
     if (universe) universe.selectNode(node.id);
-    else announceFallbackSelection(node);
+    else fallbackRenderer?.selectNode(node.id);
 }
 
 export function dispose() {

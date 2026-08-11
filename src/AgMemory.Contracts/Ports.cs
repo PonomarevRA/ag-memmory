@@ -26,6 +26,16 @@ public interface IMemoryReaderQueryService
     Task<MemoryReaderDocumentPage> ReadDocumentAsync(MemoryReaderDocumentRequest request, CancellationToken cancellationToken);
 }
 
+public interface IMemoryReaderCatalogQueryService
+{
+    Task<MemoryReaderCatalogPage> BrowseAsync(MemoryReaderCatalogRequest request, CancellationToken cancellationToken);
+}
+
+public interface IMemoryGraphPortionQueryService
+{
+    Task<MemoryGraphPortion> ReadPortionAsync(MemoryGraphPortionRequest request, CancellationToken cancellationToken);
+}
+
 public interface IHotMemoryService
 {
     Task<HotMemoryStateResult> UpdateAsync(UpdateHotMemoryStateCommand command, CancellationToken cancellationToken);
@@ -142,6 +152,22 @@ public interface IMemoryReaderSource
         CancellationToken cancellationToken);
 
     Task<MemoryId?> ResolveRouteAsync(string routeKey, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Dedicated server-only catalog storage port. It is intentionally separate from IMemoryStore.ListAsync so browser
+/// navigation can only read immutable, generation-bound leaves built from a bounded selected-column traversal.
+/// </summary>
+public interface IMemoryReaderCatalogSource
+{
+    Task<MemoryReaderCatalogBuildPortion> ReadBuildPortionAsync(
+        MemoryReaderCatalogBuildRequest request,
+        CancellationToken cancellationToken);
+
+    Task<MemoryReaderCatalogLeafPage?> ReadReadyLeafPageAsync(
+        MemorySearchEligibility eligibility,
+        MemoryReaderCatalogCursor? cursor,
+        CancellationToken cancellationToken);
 }
 
 public interface IMemoryStoreTransaction : IAsyncDisposable

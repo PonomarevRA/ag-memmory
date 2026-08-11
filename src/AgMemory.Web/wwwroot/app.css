@@ -89,7 +89,8 @@ p { margin-bottom: var(--space-4); }
 .app-shell { display: grid; min-height: 100vh; grid-template-rows: auto 1fr auto; }
 .app-header { position: sticky; z-index: 10; top: 0; display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-5); align-items: center; min-height: 4.5rem; padding: var(--space-2) max(var(--space-4), calc((100vw - 75rem) / 2)); border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--surface-raised) 92%, transparent); backdrop-filter: blur(16px); }
 .brand { display: inline-flex; gap: var(--space-2); align-items: center; color: var(--text); font-weight: 800; text-decoration: none; }
-.brand-mark { display: inline-grid; width: 2rem; height: 2rem; place-items: center; border-radius: 0.625rem; background: var(--primary); color: var(--primary-contrast); }
+.brand-mark { display: inline-grid; width: 2rem; height: 2rem; overflow: hidden; border-radius: 0.625rem; }
+.brand-mark img { display: block; width: 100%; height: 100%; }
 .primary-nav { display: flex; gap: var(--space-1); align-items: center; }
 .primary-nav a { padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); color: var(--text-muted); font-size: 0.9375rem; font-weight: 650; text-decoration: none; }
 .primary-nav a.active, .primary-nav a:hover { color: var(--text); background: var(--surface-muted); }
@@ -148,6 +149,7 @@ p { margin-bottom: var(--space-4); }
 .memory-reader-block h2 { margin-bottom: var(--space-3); }
 .memory-reader-block__content { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memory-reader-actions { display: flex; justify-content: center; margin-top: var(--space-5); }
+.memory-reader-catalog { display: grid; gap: var(--space-3); }.memory-reader-catalog__item { display: grid; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); }.memory-reader-catalog__item p { margin: 0; }.memory-reader-catalog__item .ui-button { justify-self: start; }
 .memory-status-toolbar { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-5) 0; color: var(--text-muted); font-size: 0.9375rem; }
 .memory-status-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin: var(--space-5) 0; }
 .memory-status-metric { display: grid; gap: var(--space-1); min-height: 10rem; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); box-shadow: var(--shadow); }
@@ -156,9 +158,10 @@ p { margin-bottom: var(--space-4); }
 .memory-graph-card { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); box-shadow: var(--shadow); }
 .memory-graph-toolbar { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; padding: var(--space-3); border-bottom: 1px solid var(--border); }
 .memory-graph-stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem); align-items: stretch; }
-.memory-graph-scene { min-width: 0; min-height: clamp(24rem, 55vw, 40rem); background: #101827; }
+.memory-graph-scene { position: relative; min-width: 0; min-height: clamp(24rem, 55vw, 40rem); background: #101827; }
 .memory-graph-canvas { display: block; width: 100%; height: clamp(24rem, 55vw, 40rem); touch-action: none; background: #101827; }
 .memory-graph-canvas[hidden] { display: none; }
+.memory-graph-loading-overlay { position: absolute; z-index: 1; top: var(--space-3); left: var(--space-3); max-width: calc(100% - 2 * var(--space-3)); padding: var(--space-2) var(--space-3); border: 1px solid #A8B7D1; border-radius: var(--radius-control); background: rgb(16 24 39 / 0.9); color: #F8FAFC; font-size: 0.875rem; pointer-events: none; }
 .memory-graph-inspector { display: grid; align-content: start; gap: var(--space-5); padding: var(--space-4); border-left: 1px solid var(--border); background: var(--surface-muted); }
 .memory-graph-inspector h2 { margin-bottom: var(--space-2); }
 .memory-graph-selection { min-height: 4.75rem; margin-bottom: 0; color: var(--text-muted); }
@@ -171,5 +174,8 @@ p { margin-bottom: var(--space-4); }
 .memory-graph-summary__node { width: 100%; padding: var(--space-2); border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--text); cursor: pointer; text-align: left; }
 .memory-graph-summary__node:hover { border-color: var(--border); background: var(--surface-muted); }
 .memory-graph-summary__edges { margin-top: var(--space-3); }
+.header-menu-toggle, .primary-nav__close { display: none; }
+.focus-sentinel { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 @media (max-width: 52rem) { .memory-graph-stage { grid-template-columns: 1fr; }.memory-graph-inspector { border-top: 1px solid var(--border); border-left: 0; }.memory-graph-canvas, .memory-graph-scene { min-height: clamp(20rem, 72vw, 32rem); height: clamp(20rem, 72vw, 32rem); }.memory-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 36rem) { .memory-graph-toolbar .ui-button { flex: 1 1 9rem; }.memory-graph-canvas, .memory-graph-scene { min-height: 20rem; height: 20rem; } }
+@media (max-width: 62rem) { .app-header { grid-template-columns: auto 1fr auto; gap: var(--space-2); }.header-menu-toggle { display: inline-flex; justify-self: start; }.primary-nav { position: fixed; z-index: 20; inset: 0 auto 0 0; display: none; width: min(21rem, calc(100vw - 3rem)); padding: 5rem var(--space-4) var(--space-4); overflow-x: clip; overflow-y: auto; flex-direction: column; align-items: stretch; border-right: 1px solid var(--border); background: var(--surface-raised); box-shadow: var(--shadow); }.primary-nav--open { display: flex; }.primary-nav a { padding: var(--space-3); font-size: 1rem; }.primary-nav__close { display: inline-flex; position: absolute; top: var(--space-3); right: var(--space-3); }.header-actions { justify-self: end; }.history-drawer { top: 4.75rem; } }

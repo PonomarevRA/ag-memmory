@@ -28,7 +28,7 @@ public sealed class MemoryGraphUniverseAssetTests
     {
         var module = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor.js");
 
-        Assert.Contains("const MAX_NODES = 75;", module, StringComparison.Ordinal);
+        Assert.Contains("const MAX_NODES = 150;", module, StringComparison.Ordinal);
         Assert.Contains("const MAX_EDGES = 150;", module, StringComparison.Ordinal);
         Assert.Contains("if (nodes.length === MAX_NODES) break;", module, StringComparison.Ordinal);
         Assert.Contains("if (edges.length === MAX_EDGES) break;", module, StringComparison.Ordinal);
@@ -48,9 +48,8 @@ public sealed class MemoryGraphUniverseAssetTests
         var universe = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-universe.js");
         var page = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor");
 
-        Assert.Contains("const stem = `${node.type}:${node.label}`;", module, StringComparison.Ordinal);
-        Assert.Contains("const ordinal = labelOrdinals.get(stem) ?? 0;", module, StringComparison.Ordinal);
-        Assert.Contains("node.layoutKey = `${stem}:${ordinal}`;", module, StringComparison.Ordinal);
+        Assert.Contains("for (const node of nodes) node.layoutKey = node.id;", module, StringComparison.Ordinal);
+        Assert.DoesNotContain("labelOrdinals", module, StringComparison.Ordinal);
         Assert.Contains("function sortIds(ids, layoutKeys)", universe, StringComparison.Ordinal);
         Assert.Contains("const layoutKeys = new Map(snapshot.nodes.map(node => [node.id, node.layoutKey", universe, StringComparison.Ordinal);
         Assert.Contains("let labels = new Map(component.map(id => [id, layoutKeys.get(id)]));", universe, StringComparison.Ordinal);
@@ -66,7 +65,7 @@ public sealed class MemoryGraphUniverseAssetTests
         var universe = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-universe.js");
         var fallback = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-renderer.js");
 
-        Assert.Contains("fetch(ROUTE", module, StringComparison.Ordinal);
+        Assert.Contains("fetch(route,", module, StringComparison.Ordinal);
         Assert.DoesNotContain("fetch(", universe, StringComparison.Ordinal);
         Assert.DoesNotContain("fetch(", fallback, StringComparison.Ordinal);
         Assert.DoesNotContain("import(", universe, StringComparison.Ordinal);
@@ -85,7 +84,7 @@ public sealed class MemoryGraphUniverseAssetTests
         var universe = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-universe.js");
 
         Assert.Contains("function activateFallback()", module, StringComparison.Ordinal);
-        Assert.Contains("createMemoryGraphRenderer(fallbackCanvas)", module, StringComparison.Ordinal);
+        Assert.Contains("createMemoryGraphRenderer(fallbackCanvas, announceFallbackSelection)", module, StringComparison.Ordinal);
         Assert.Contains("universe?.dispose();", module, StringComparison.Ordinal);
         Assert.Contains("fallbackRenderer?.dispose();", module, StringComparison.Ordinal);
         Assert.Contains("webglcontextlost", universe, StringComparison.Ordinal);
@@ -113,6 +112,60 @@ public sealed class MemoryGraphUniverseAssetTests
         Assert.Contains("SelectNodeAsync", interop, StringComparison.Ordinal);
         Assert.Contains("SelectNodeMethod = \"selectNode\"", interop, StringComparison.Ordinal);
         Assert.Contains(".memory-graph-stage { grid-template-columns: 1fr; }", css, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PagedGraph_PreservesViewAndOpaqueSelectionAcrossTwentyFiveNodePortionsIncludingTheTwoDimensionalFallback()
+    {
+        var page = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor");
+        var module = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor.js");
+        var universe = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-universe.js");
+        var fallback = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-renderer.js");
+
+        Assert.Contains("LoadAsync(token)", page, StringComparison.Ordinal);
+        Assert.Contains("RenderAsync(_graph!, preserveView: true)", page, StringComparison.Ordinal);
+        Assert.Contains("universe.render(currentSnapshot, preserveView)", module, StringComparison.Ordinal);
+        Assert.Contains("fallbackRenderer?.render(currentSnapshot, preserveView)", module, StringComparison.Ordinal);
+        Assert.Contains("createMemoryGraphRenderer(fallbackCanvas, announceFallbackSelection)", module, StringComparison.Ordinal);
+        Assert.Contains("fallbackRenderer?.selectNode(node.id)", module, StringComparison.Ordinal);
+        Assert.Contains("const priorView = preserveView", universe, StringComparison.Ordinal);
+        Assert.Contains("selectedId = priorSelection && nodeRecords.has(priorSelection) ? priorSelection : undefined;", universe, StringComparison.Ordinal);
+        Assert.Contains("selectedId = previousSelection && nodes.has(previousSelection) ? previousSelection : undefined;", fallback, StringComparison.Ordinal);
+        Assert.Contains("if (selected) onSelect?.(selected);", fallback, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GraphEdges_HaveAnAccessibleBaseContrastAndSelectedThicknessInBothRenderers()
+    {
+        var universe = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-universe.js");
+        var fallback = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-renderer.js");
+
+        Assert.Contains("color: 0xa8b7d1", universe, StringComparison.Ordinal);
+        Assert.Contains("opacity: 0.48 + normalizedWeight * 0.32", universe, StringComparison.Ordinal);
+        Assert.Contains("edge.material.linewidth = selected && isNeighborEdge ? 3 : 1;", universe, StringComparison.Ordinal);
+        Assert.Contains("context.strokeStyle = selected ? '#ffffff' : '#A8B7D1';", fallback, StringComparison.Ordinal);
+        Assert.Contains("context.lineWidth = Math.min((selected ? 2 : 1) + edge.weight * 0.55, selected ? 6 : 4);", fallback, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GraphLoadMore_KeepsInitializedCanvasesMountedAndUsesAAccessibleNonBlockingLoadingOverlay()
+    {
+        var page = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor");
+        var css = Read("src/AgMemory.Web/wwwroot/app.css");
+        var loadMoreStart = page.IndexOf("private async Task LoadMoreAsync()", StringComparison.Ordinal);
+        var loadMoreEnd = page.IndexOf("private async Task ZoomInAsync()", StringComparison.Ordinal);
+        var loadMore = page[loadMoreStart..loadMoreEnd];
+
+        Assert.Contains("@if (_loading && _graph is null)", page, StringComparison.Ordinal);
+        Assert.Contains("aria-busy=\"@_loading\"", page, StringComparison.Ordinal);
+        Assert.Contains("@ref=\"_canvas\"", page, StringComparison.Ordinal);
+        Assert.Contains("@ref=\"_fallbackCanvas\"", page, StringComparison.Ordinal);
+        Assert.Contains("memory-graph-loading-overlay\" role=\"status\" aria-live=\"polite\"", page, StringComparison.Ordinal);
+        Assert.Contains("RenderAsync(_graph!, preserveView: true)", loadMore, StringComparison.Ordinal);
+        Assert.DoesNotContain("_canvasInitialized = false", loadMore, StringComparison.Ordinal);
+        Assert.Contains(".memory-graph-scene { position: relative;", css, StringComparison.Ordinal);
+        Assert.Contains(".memory-graph-loading-overlay", css, StringComparison.Ordinal);
+        Assert.Contains("pointer-events: none", css, StringComparison.Ordinal);
     }
 
     private static string Read(string relativePath) => File.ReadAllText(Path.Combine(RepositoryRoot, relativePath));

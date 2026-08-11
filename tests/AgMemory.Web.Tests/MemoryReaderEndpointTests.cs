@@ -227,6 +227,21 @@ public sealed class MemoryReaderEndpointTests
         Assert.Contains("const MAX_BLOCKS = 8;", module, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ReaderPage_AppendsContinuationPagesAndRestartsAtTheCatalogWithoutExposingNavigationState()
+    {
+        var page = Read("src/AgMemory.Web/Features/MemoryReader/MemoryReaderPage.razor");
+        var module = Read("src/AgMemory.Web/Features/MemoryReader/MemoryReaderPage.razor.js");
+
+        Assert.Contains("await LoadAsync(routeKey, token, append: true);", page, StringComparison.Ordinal);
+        Assert.Contains("Blocks = _reader.Blocks.Concat(page.Blocks).GroupBy(block => block.Id, StringComparer.Ordinal).Select(group => group.First()).ToArray()", page, StringComparison.Ordinal);
+        Assert.Contains("private async Task RestartAsync() => await LoadCatalogAsync(null, replace: true);", page, StringComparison.Ordinal);
+        Assert.Contains("await LoadCatalogAsync(token, replace: false);", page, StringComparison.Ordinal);
+        Assert.Contains("Documents = _catalog.Documents.Concat(page.Documents).GroupBy(document => document.Href, StringComparer.Ordinal).Select(group => group.First()).ToArray()", page, StringComparison.Ordinal);
+        Assert.Contains("export async function loadCatalog(token)", module, StringComparison.Ordinal);
+        Assert.DoesNotContain("continuation:", page, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static MemoryReaderHostOptions Options(MemoryId homeMemoryId) => new()
     {
         Enabled = true,

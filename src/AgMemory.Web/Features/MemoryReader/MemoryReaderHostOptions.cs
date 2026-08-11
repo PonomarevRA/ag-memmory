@@ -16,7 +16,7 @@ public sealed class MemoryReaderHostOptions
     internal MemoryReaderHostConfiguration? TryCreate(string dataDirectory)
     {
         if (!Enabled || string.IsNullOrWhiteSpace(dataDirectory) || string.IsNullOrWhiteSpace(ActorId) ||
-            string.IsNullOrWhiteSpace(HomeMemoryId) || Scope is null || string.IsNullOrWhiteSpace(Scope.TenantId))
+            Scope is null || string.IsNullOrWhiteSpace(Scope.TenantId))
             return null;
 
         try
@@ -26,8 +26,12 @@ public sealed class MemoryReaderHostOptions
             scope.Validate();
             var actor = new ActorId(ActorId);
             actor.Validate(nameof(ActorId));
-            var home = new MemoryId(HomeMemoryId);
-            home.Validate(nameof(HomeMemoryId));
+            MemoryId? home = null;
+            if (!string.IsNullOrWhiteSpace(HomeMemoryId))
+            {
+                home = new MemoryId(HomeMemoryId);
+                home.Value.Validate(nameof(HomeMemoryId));
+            }
             var configuredPath = string.IsNullOrWhiteSpace(StoragePath) ? "memory-graph.lancedb" : StoragePath;
             var storagePath = Path.IsPathRooted(configuredPath)
                 ? Path.GetFullPath(configuredPath)
@@ -52,4 +56,4 @@ public sealed class MemoryReaderScopeOptions
     public string? RunId { get; init; }
 }
 
-internal sealed record MemoryReaderHostConfiguration(ActorId Actor, MemoryScope Scope, MemoryId HomeMemoryId, string StoragePath);
+internal sealed record MemoryReaderHostConfiguration(ActorId Actor, MemoryScope Scope, MemoryId? HomeMemoryId, string StoragePath);

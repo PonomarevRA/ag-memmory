@@ -92,6 +92,8 @@ public sealed partial class LanceDbMemoryStore
                 .ConfigureAwait(false);
         }
 
+        await InvalidateReaderCatalogAsync(record.Scope, cancellationToken).ConfigureAwait(false);
+
         if (record.Embedding is null || record.EmbeddingVector is null) return;
         var vectorTableName = VectorTableName(record.Embedding);
         var vectorSchema = VectorTableDefinition(record.Embedding);
@@ -111,6 +113,7 @@ public sealed partial class LanceDbMemoryStore
             await DeleteVectorRowAsync(record.Embedding, record.Id, cancellationToken).ConfigureAwait(false);
         using var table = await OpenTableAsync(RecordsTable, cancellationToken).ConfigureAwait(false);
         await table.Delete($"id = {Literal(record.Id.Value)}").ConfigureAwait(false);
+        await InvalidateReaderCatalogAsync(record.Scope, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task DeleteVectorRowAsync(EmbeddingReference embedding, MemoryId id, CancellationToken cancellationToken)

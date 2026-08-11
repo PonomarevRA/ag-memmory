@@ -1,5 +1,4 @@
 using System.Net;
-using System.Security.Cryptography;
 using System.Text.Json;
 using AgMemory.Contracts;
 
@@ -14,7 +13,8 @@ public static class MemoryGraphEndpoint
         HttpContext context,
         IHostEnvironment environment,
         LocalMemoryGraphFeature feature,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? continuation = null)
     {
         context.Response.Headers.CacheControl = "no-store";
         if (!MemoryGraphAccessPolicy.AllowsStoreAccess(
@@ -23,10 +23,13 @@ public static class MemoryGraphEndpoint
                 context.Connection.RemoteIpAddress))
             return Json(MemoryGraphApiResponse.Unavailable);
 
+        MemoryGraphPortionCursor? cursor = null;
+        if (!string.IsNullOrWhiteSpace(continuation) && !feature.TryUnprotectContinuation(continuation, out cursor))
+            return Json(MemoryGraphApiResponse.Stale);
         try
         {
-            var snapshot = await feature.ReadAsync(cancellationToken).ConfigureAwait(false);
-            return snapshot.Error is null ? Json(ToApiResponse(snapshot)) : Json(MemoryGraphApiResponse.Unavailable);
+            var snapshot = await feature.ReadPortionAsync(cursor, cancellationToken).ConfigureAwait(false);
+            return Json(ToApiResponse(snapshot, feature));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -40,48 +43,32 @@ public static class MemoryGraphEndpoint
 
     private static IResult Json(MemoryGraphApiResponse response) => new MemoryGraphJsonResult(response);
 
-    private static MemoryGraphApiResponse ToApiResponse(MemoryGraphSnapshot snapshot)
+    private static MemoryGraphApiResponse ToApiResponse(MemoryGraphPortion snapshot, LocalMemoryGraphFeature feature)
     {
-        var opaqueIds = snapshot.Nodes.ToDictionary(node => node.MemoryId, _ => OpaqueId());
-        var ordinalByType = new Dictionary<MemoryRecordType, int>();
-        var nodes = snapshot.Nodes.Select(node =>
-        {
-            var ordinal = ordinalByType.GetValueOrDefault(node.Type) + 1;
-            ordinalByType[node.Type] = ordinal;
-            return new MemoryGraphNodeDto(
-                opaqueIds[node.MemoryId],
-                $"{node.Type} {ordinal}",
-                node.Type.ToString(),
-                node.ImportanceBand,
-                node.ConfidenceBand,
-                node.Degree);
-        }).ToArray();
-        var edges = snapshot.Edges
-            .Where(edge => opaqueIds.ContainsKey(edge.FirstMemoryId) && opaqueIds.ContainsKey(edge.SecondMemoryId))
-            .Select(edge => new MemoryGraphEdgeDto(
-                opaqueIds[edge.FirstMemoryId],
-                opaqueIds[edge.SecondMemoryId],
-                edge.Weight,
-                edge.Kind.ToString()))
-            .ToArray();
-        return new("available", nodes, edges);
+        if (snapshot.State != MemoryGraphPortionState.Available) return snapshot.State == MemoryGraphPortionState.Changed
+            ? MemoryGraphApiResponse.Changed : MemoryGraphApiResponse.Unavailable;
+        return new("available", snapshot.Nodes.Select(node => new MemoryGraphNodeDto(node.NodeKey.Value, node.RecordHref,
+            node.Type.ToString(), node.ImportanceBand, node.ConfidenceBand, node.Degree)).ToArray(),
+            snapshot.Edges.Select(edge => new MemoryGraphEdgeDto(edge.FirstNodeKey.Value, edge.SecondNodeKey.Value, edge.Weight, edge.Kind.ToString())).ToArray(),
+            feature.ProtectContinuation(snapshot.NextCursor));
     }
-
-    private static string OpaqueId() => Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
 }
 
 /// <summary>Browser-safe graph response. It deliberately has no scope, actor, durable ID, text or error field.</summary>
 public sealed record MemoryGraphApiResponse(
     string Status,
     IReadOnlyList<MemoryGraphNodeDto> Nodes,
-    IReadOnlyList<MemoryGraphEdgeDto> Edges)
+    IReadOnlyList<MemoryGraphEdgeDto> Edges,
+    string? NextToken)
 {
-    public static MemoryGraphApiResponse Unavailable { get; } = new("unavailable", [], []);
+    public static MemoryGraphApiResponse Unavailable { get; } = new("unavailable", [], [], null);
+    public static MemoryGraphApiResponse Changed { get; } = new("changed", [], [], null);
+    public static MemoryGraphApiResponse Stale { get; } = new("stale", [], [], null);
 }
 
 public sealed record MemoryGraphNodeDto(
     string Id,
-    string Label,
+    string Href,
     string Type,
     int ImportanceBand,
     int ConfidenceBand,

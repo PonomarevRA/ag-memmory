@@ -1,0 +1,13 @@
+schema: agent-memory-kind-registry/v1
+version: 1
+area: memory-reader
+kind: outcome
+objects:
+  - id: memory-reader.outcome.local-catalog-and-paged-graph
+    title: Delivered scoped catalogue reader and incremental graph
+    status: completed
+    summary: Standalone now reads its exact local scope through ordered catalogue leaves and paged graph snapshots.
+    path: local-catalog-and-paged-graph.a2a.yaml
+    tags: [memory-reader, catalog, graph, lancedb, standalone]
+    recorded: "2026-08-10"
+    updated: "2026-08-10"

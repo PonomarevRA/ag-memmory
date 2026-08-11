@@ -1,5 +1,6 @@
 const HOME_ROUTE = '/api/memory-reader';
 const STATUS = new Set(['available', 'not-found', 'changed', 'stale', 'unavailable']);
+const CATALOG_STATUS = new Set(['available', 'not-found', 'changed', 'stale', 'unavailable', 'catalog-not-ready']);
 const MAX_BLOCKS = 8;
 const MAX_RUNS_PER_BLOCK = 128;
 
@@ -53,5 +54,27 @@ export async function load(routeKey, token) {
         return response.ok ? safeResponse(await response.json()) : unavailable();
     } catch {
         return unavailable();
+    }
+}
+
+export async function loadCatalog(token) {
+    const route = typeof token === 'string' && token.length > 0
+        ? `${HOME_ROUTE}?continuation=${encodeURIComponent(token)}`
+        : HOME_ROUTE;
+    try {
+        const response = await fetch(route, { credentials: 'same-origin', cache: 'no-store' });
+        const payload = response.ok ? await response.json() : null;
+        if (!payload || !CATALOG_STATUS.has(payload.status)) return { status: 'unavailable', documents: [], nextToken: null };
+        if (payload.status !== 'available' || !Array.isArray(payload.documents)) return { status: payload.status, documents: [], nextToken: null };
+        const documents = payload.documents.flatMap(value => {
+            const href = safeText(value?.href, 256);
+            const type = safeText(value?.type, 80);
+            const preview = safeText(value?.preview, 320);
+            return href && href.startsWith('/memory-reader/') && type && preview ? [{ href, type, preview, updatedAt: value.updatedAt }] : [];
+        }).slice(0, 20);
+        const nextToken = payload.nextToken === null ? null : safeText(payload.nextToken, 4096);
+        return { status: 'available', documents, nextToken };
+    } catch {
+        return { status: 'unavailable', documents: [], nextToken: null };
     }
 }

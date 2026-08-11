@@ -1,0 +1,22 @@
+schema: agent-memory-object/v1
+id: web-ui.outcome.shared-brand-icon
+kind: outcome
+area: web-ui
+status: completed
+title: Delivered shared browser and macOS standalone app icon
+summary: One SVG mark now supplies the Web icon set and deterministic local macOS ICNS packaging.
+recorded: "2026-08-10"
+updated: "2026-08-10"
+tags: [web-ui, branding, macos, packaging, icons]
+sources:
+  - kind: code
+    ref: src/AgMemory.Web/wwwroot/assets/brand/agmemory-icon.svg
+  - kind: code
+    ref: src/AgMemory.Web/Components/App.razor
+  - kind: code
+    ref: scripts/package-macos-app.sh
+payload:
+  change: Added a shared memory-block mark, browser icon metadata, Web manifest assets, and macOS ICNS generation.
+  measurement: Release tests passed; the rebuilt bundle served icon assets and a loopback host.
+  result: Browser and local macOS app use the same canonical icon without an external dependency.
+  next_action: Add a Developer ID signature and notarization before external distribution.

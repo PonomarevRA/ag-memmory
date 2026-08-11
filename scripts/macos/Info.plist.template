@@ -8,6 +8,8 @@
   <string>AgMemory</string>
   <key>CFBundleExecutable</key>
   <string>AgMemory.Web</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
   <string>com.ponomarev.agmemory</string>
   <key>CFBundleInfoDictionaryVersion</key>

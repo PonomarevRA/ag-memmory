@@ -14,6 +14,9 @@ public sealed class MemoryReaderInterop : IAsyncDisposable
     public async ValueTask<MemoryReaderApiResponse?> LoadAsync(string? routeKey, string? token) =>
         await (await GetModuleAsync()).InvokeAsync<MemoryReaderApiResponse?>("load", routeKey, token);
 
+    public async ValueTask<MemoryReaderCatalogApiResponse?> LoadCatalogAsync(string? token) =>
+        await (await GetModuleAsync()).InvokeAsync<MemoryReaderCatalogApiResponse?>("loadCatalog", token);
+
     private async ValueTask<IJSObjectReference> GetModuleAsync() =>
         _module ??= await _js.InvokeAsync<IJSObjectReference>("import", ModulePath);
 

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using AgMemory.Contracts;
 
@@ -7,24 +8,27 @@ namespace AgMemory.Core;
 /// Builds a bounded graph snapshot from active memory records. Relationships are derived per query from
 /// normalized shared entities and are deliberately never persisted as <see cref="MemoryRelation"/> values.
 /// </summary>
-public sealed class MemoryGraphQueryService : IMemoryGraphQueryService
+public sealed class MemoryGraphQueryService : IMemoryGraphQueryService, IMemoryGraphPortionQueryService
 {
     private readonly IMemoryGraphSource _source;
     private readonly IAuthorizationScopeValidator _authorization;
     private readonly IClock _clock;
     private readonly ContractVersion _supportedContractVersion;
+    private readonly IMemoryReaderSource? _readerSource;
 
     public MemoryGraphQueryService(
         IMemoryGraphSource source,
         IAuthorizationScopeValidator authorization,
         IClock clock,
-        ContractVersion supportedContractVersion)
+        ContractVersion supportedContractVersion,
+        IMemoryReaderSource? readerSource = null)
     {
         _source = source ?? throw new ArgumentNullException(nameof(source));
         _authorization = authorization ?? throw new ArgumentNullException(nameof(authorization));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         supportedContractVersion.Validate(nameof(supportedContractVersion));
         _supportedContractVersion = supportedContractVersion;
+        _readerSource = readerSource;
     }
 
     public async Task<MemoryGraphSnapshot> ReadAsync(MemoryGraphRequest request, CancellationToken cancellationToken)
@@ -95,6 +99,44 @@ public sealed class MemoryGraphQueryService : IMemoryGraphQueryService
         }
     }
 
+    public async Task<MemoryGraphPortion> ReadPortionAsync(MemoryGraphPortionRequest request, CancellationToken cancellationToken)
+    {
+        if (_readerSource is null || !IsValid(request)) return Portion(MemoryGraphPortionState.Unavailable, [], [], null, request?.ContractVersion);
+        try
+        {
+            var snapshot = await ReadAsync(new(request.Actor, request.RequestedScope, MemoryGraphLimits.MaximumSourceRecords,
+                MemoryGraphLimits.MaximumVisibleNodes, MemoryGraphLimits.MaximumEdges, request.ContractVersion), cancellationToken).ConfigureAwait(false);
+            if (snapshot.Error is not null) return Portion(MemoryGraphPortionState.NotFound, [], [], null, request.ContractVersion);
+            var generation = GenerationKey(snapshot.Nodes);
+            if (request.Cursor is not null && !string.Equals(request.Cursor.GenerationKey, generation, StringComparison.Ordinal))
+                return Portion(MemoryGraphPortionState.Changed, [], [], null, request.ContractVersion);
+            var portion = request.Cursor?.NextPortion ?? 1;
+            if (portion <= 0 || portion > MemoryGraphLimits.MaximumVisibleNodes / MemoryGraphLimits.NodesPerPortion)
+                return Portion(MemoryGraphPortionState.Stale, [], [], null, request.ContractVersion);
+            var visibleCount = Math.Min(portion * MemoryGraphLimits.NodesPerPortion, snapshot.Nodes.Count);
+            var visible = snapshot.Nodes.Take(visibleCount).ToArray();
+            var visibleIds = visible.Select(node => node.MemoryId).ToHashSet();
+            var nodeKeys = visible.ToDictionary(node => node.MemoryId, node => NodeKey(generation, node.MemoryId));
+            var nodes = new List<MemoryGraphBrowserNode>(visible.Length);
+            foreach (var node in visible)
+            {
+                var route = await _readerSource.GetOrCreateRouteAsync(node.MemoryId, cancellationToken).ConfigureAwait(false);
+                nodes.Add(new(nodeKeys[node.MemoryId], $"/memory-reader/{Uri.EscapeDataString(route.RouteKey)}", node.Type,
+                    node.ImportanceBand, node.ConfidenceBand, node.Degree));
+            }
+            var edges = snapshot.Edges
+                .Where(edge => visibleIds.Contains(edge.FirstMemoryId) && visibleIds.Contains(edge.SecondMemoryId))
+                .Select(edge => new MemoryGraphBrowserEdge(nodeKeys[edge.FirstMemoryId], nodeKeys[edge.SecondMemoryId], edge.Weight, edge.Kind))
+                .ToArray();
+            var next = visibleCount < Math.Min(MemoryGraphLimits.MaximumVisibleNodes, snapshot.Nodes.Count)
+                ? new MemoryGraphPortionCursor(generation, portion + 1)
+                : null;
+            return Portion(MemoryGraphPortionState.Available, nodes, edges, next, request.ContractVersion);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch { return Portion(MemoryGraphPortionState.Unavailable, [], [], null, request.ContractVersion); }
+    }
+
     private bool IsValid(MemoryGraphRequest? request, out MemoryError? error)
     {
         error = null;
@@ -120,6 +162,14 @@ public sealed class MemoryGraphQueryService : IMemoryGraphQueryService
             error = new(MemoryErrorCode.InvalidArgument, nameof(request));
             return false;
         }
+    }
+
+    private bool IsValid(MemoryGraphPortionRequest? request)
+    {
+        if (request is null || request.ContractVersion != _supportedContractVersion || request.Cursor is { NextPortion: <= 0 } ||
+            request.Cursor is { GenerationKey.Length: > 128 }) return false;
+        try { request.Actor.Validate(nameof(request.Actor)); request.RequestedScope.Validate(); return true; }
+        catch (ArgumentException) { return false; }
     }
 
     private static bool IsUsable(MemoryGraphSourceRecord record) =>
@@ -228,6 +278,20 @@ public sealed class MemoryGraphQueryService : IMemoryGraphQueryService
         new([], [], error, request?.ContractVersion ?? _supportedContractVersion);
 
     private static MemoryError DependencyFailure() => new(MemoryErrorCode.DependencyFailure, null);
+
+    private static string GenerationKey(IReadOnlyList<MemoryGraphNode> nodes) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+        string.Join("\u001f", nodes.Select(node => node.MemoryId.Value))))).ToLowerInvariant()[..32];
+
+    private static GraphNodeKey NodeKey(string generation, MemoryId id) => new(Convert.ToHexString(SHA256.HashData(
+        Encoding.UTF8.GetBytes($"{generation}\u001f{id.Value}"))).ToLowerInvariant()[..32]);
+
+    private MemoryGraphPortion Portion(
+        MemoryGraphPortionState state,
+        IReadOnlyList<MemoryGraphBrowserNode> nodes,
+        IReadOnlyList<MemoryGraphBrowserEdge> edges,
+        MemoryGraphPortionCursor? next,
+        ContractVersion? version) => new(state, nodes, edges, next, state == MemoryGraphPortionState.Available ? null : DependencyFailure(),
+        version ?? _supportedContractVersion);
 
     private readonly record struct MemoryIdPair(MemoryId First, MemoryId Second)
     {

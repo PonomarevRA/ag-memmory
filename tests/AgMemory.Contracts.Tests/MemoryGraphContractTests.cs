@@ -16,7 +16,8 @@ public sealed class MemoryGraphContractTests
         AssertParameter(typeof(IMemoryGraphSource), nameof(IMemoryGraphSource.ReadAsync), typeof(MemoryGraphSourceRequest));
 
         Assert.Equal(200, MemoryGraphLimits.MaximumSourceRecords);
-        Assert.Equal(75, MemoryGraphLimits.MaximumVisibleNodes);
+        Assert.Equal(25, MemoryGraphLimits.NodesPerPortion);
+        Assert.Equal(150, MemoryGraphLimits.MaximumVisibleNodes);
         Assert.Equal(150, MemoryGraphLimits.MaximumEdges);
         Assert.Equal([MemoryGraphEdgeKind.SharedEntity], Enum.GetValues<MemoryGraphEdgeKind>());
     }
@@ -47,6 +48,48 @@ public sealed class MemoryGraphContractTests
         Assert.Contains(nodeProperties, property => property.Name == nameof(MemoryGraphNode.MemoryId) && property.PropertyType == typeof(MemoryId));
         Assert.Contains(nodeProperties, property => property.Name == nameof(MemoryGraphNode.ImportanceBand) && property.PropertyType == typeof(int));
         Assert.Contains(nodeProperties, property => property.Name == nameof(MemoryGraphNode.ConfidenceBand) && property.PropertyType == typeof(int));
+    }
+
+    [Fact]
+    public void GraphPortions_UseOpaqueLineageKeysWithoutBrowserSelectedLimits()
+    {
+        AssertParameter(typeof(IMemoryGraphPortionQueryService), nameof(IMemoryGraphPortionQueryService.ReadPortionAsync), typeof(MemoryGraphPortionRequest));
+        Assert.DoesNotContain(typeof(MemoryGraphPortionRequest).GetProperties(), property =>
+            property.Name.Contains("Limit", StringComparison.Ordinal) || property.Name.Contains("PageSize", StringComparison.Ordinal));
+
+        var browserTypes = new[] { typeof(MemoryGraphBrowserNode), typeof(MemoryGraphBrowserEdge), typeof(MemoryGraphPortion) };
+        var prohibitedTypes = new[] { typeof(MemoryId), typeof(MemoryScope), typeof(ActorId), typeof(MemoryRecord) };
+        foreach (var browserType in browserTypes)
+        {
+            var properties = browserType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            Assert.DoesNotContain(properties, property => prohibitedTypes.Contains(property.PropertyType));
+        }
+
+        Assert.Equal(typeof(GraphNodeKey), typeof(MemoryGraphBrowserNode).GetProperty(nameof(MemoryGraphBrowserNode.NodeKey))!.PropertyType);
+        Assert.Equal(typeof(string), typeof(MemoryGraphBrowserNode).GetProperty(nameof(MemoryGraphBrowserNode.RecordHref))!.PropertyType);
+        Assert.Contains(MemoryGraphPortionState.CatalogNotReady, Enum.GetValues<MemoryGraphPortionState>());
+    }
+
+    [Fact]
+    public void GraphPortionStates_RemainDistinctAndBrowserModelsHaveNoAuthorityOrStoragePath()
+    {
+        Assert.Equal(
+        [
+            MemoryGraphPortionState.Available,
+            MemoryGraphPortionState.Stale,
+            MemoryGraphPortionState.Changed,
+            MemoryGraphPortionState.NotFound,
+            MemoryGraphPortionState.Unavailable,
+            MemoryGraphPortionState.CatalogNotReady
+        ],
+        Enum.GetValues<MemoryGraphPortionState>());
+
+        var forbiddenNames = new[] { "Actor", "Scope", "MemoryId", "Storage", "Path", "SourceOffset", "Limit" };
+        foreach (var browserType in new[] { typeof(MemoryGraphBrowserNode), typeof(MemoryGraphBrowserEdge) })
+        {
+            Assert.DoesNotContain(browserType.GetProperties(BindingFlags.Public | BindingFlags.Instance), property =>
+                forbiddenNames.Any(forbidden => property.Name.Contains(forbidden, StringComparison.OrdinalIgnoreCase)));
+        }
     }
 
     private static void AssertParameter(Type port, string methodName, Type expectedType)

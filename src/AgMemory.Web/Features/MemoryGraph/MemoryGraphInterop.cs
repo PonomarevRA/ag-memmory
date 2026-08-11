@@ -27,11 +27,11 @@ public sealed class MemoryGraphInterop : IAsyncDisposable
         ElementReference selectionSummary) =>
         await (await GetModuleAsync()).InvokeVoidAsync(InitializeMethod, canvas, fallbackCanvas, selectionSummary);
 
-    public async ValueTask<MemoryGraphApiResponse?> LoadAsync() =>
-        await (await GetModuleAsync()).InvokeAsync<MemoryGraphApiResponse?>(LoadMethod);
+    public async ValueTask<MemoryGraphApiResponse?> LoadAsync(string? continuation = null) =>
+        await (await GetModuleAsync()).InvokeAsync<MemoryGraphApiResponse?>(LoadMethod, continuation);
 
-    public async ValueTask RenderAsync(MemoryGraphApiResponse response) =>
-        await (await GetModuleAsync()).InvokeVoidAsync(RenderMethod, response);
+    public async ValueTask RenderAsync(MemoryGraphApiResponse response, bool preserveView = false) =>
+        await (await GetModuleAsync()).InvokeVoidAsync(RenderMethod, response, preserveView);
 
     public async ValueTask ZoomInAsync() =>
         await (await GetModuleAsync()).InvokeVoidAsync(ZoomInMethod);

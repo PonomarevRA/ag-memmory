@@ -6,6 +6,7 @@ using AgMemory.Web.Features.MemoryGraph;
 using AgMemory.Web.Features.MemoryStatus;
 using AgMemory.Web.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
@@ -82,6 +83,64 @@ public sealed class MemoryGraphEndpointTests
 
             Assert.Equal("no-store", context.Response.Headers.CacheControl.ToString());
             Assert.Equal("unavailable", response.Status);
+            Assert.Empty(response.Nodes);
+            Assert.Empty(response.Edges);
+            Assert.False(Directory.Exists(storagePath));
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public async Task InvalidContinuation_ReturnsStaleBeforeOpeningConfiguredStorage()
+    {
+        var root = TemporaryPath();
+        var storagePath = Path.Combine(root, "lancedb");
+        try
+        {
+            await using var feature = ConfiguredFeature(root);
+            var context = Context(IPAddress.Loopback);
+
+            var response = await ExecuteAsync(await MemoryGraphEndpoint.HandleAsync(
+                context, new TestHostEnvironment(isDevelopment: true, root), feature, default,
+                continuation: "not-a-protected-token"), context);
+
+            Assert.Equal("stale", response.Status);
+            Assert.Empty(response.Nodes);
+            Assert.Empty(response.Edges);
+            Assert.False(Directory.Exists(storagePath));
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public async Task IncompatibleContinuationSchema_ReturnsStaleBeforeOpeningConfiguredStorage()
+    {
+        var root = TemporaryPath();
+        var storagePath = Path.Combine(root, "lancedb");
+        try
+        {
+            var provider = Provider(root);
+            await using var feature = new LocalMemoryGraphFeature(ConfiguredOptions(), root, provider);
+            var incompatibleToken = provider.CreateProtector("AgMemory.Web.MemoryGraph.Navigation.v1").Protect(
+                JsonSerializer.Serialize(new
+                {
+                    SchemaVersion = "memory-graph-navigation-v0",
+                    GenerationKey = "generation",
+                    NextPortion = 2
+                }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+            var context = Context(IPAddress.Loopback);
+
+            var response = await ExecuteAsync(await MemoryGraphEndpoint.HandleAsync(
+                context, new TestHostEnvironment(isDevelopment: true, root), feature, default,
+                continuation: incompatibleToken), context);
+
+            Assert.Equal("stale", response.Status);
             Assert.Empty(response.Nodes);
             Assert.Empty(response.Edges);
             Assert.False(Directory.Exists(storagePath));
@@ -345,6 +404,9 @@ public sealed class MemoryGraphEndpointTests
     }
 
     private static LocalMemoryGraphFeature ConfiguredFeature(string root) => new(ConfiguredOptions(), root);
+
+    private static IDataProtectionProvider Provider(string root) =>
+        DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(root, "data-protection")));
 
     private static MemoryGraphHostOptions ConfiguredOptions() => new()
         {

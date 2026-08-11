@@ -1,9 +1,10 @@
 // Local, dependency-free canvas renderer. It is intentionally vendored with the host rather than loaded from a CDN.
-export function createMemoryGraphRenderer(canvas) {
+export function createMemoryGraphRenderer(canvas, onSelect) {
     const context = canvas.getContext('2d');
     const nodes = new Map();
     let edges = [];
     let scale = 1;
+    let selectedId;
     let resizeObserver;
 
     function palette() {
@@ -105,8 +106,9 @@ export function createMemoryGraphRenderer(canvas) {
             const source = nodes.get(edge.sourceId);
             const target = nodes.get(edge.targetId);
             if (!source || !target) continue;
-            context.strokeStyle = colors.border;
-            context.lineWidth = Math.min(1 + edge.weight * 0.55, 4);
+            const selected = selectedId && (edge.sourceId === selectedId || edge.targetId === selectedId);
+            context.strokeStyle = selected ? '#ffffff' : '#A8B7D1';
+            context.lineWidth = Math.min((selected ? 2 : 1) + edge.weight * 0.55, selected ? 6 : 4);
             context.beginPath();
             context.moveTo(source.x, source.y);
             context.lineTo(target.x, target.y);
@@ -119,7 +121,7 @@ export function createMemoryGraphRenderer(canvas) {
             context.arc(node.x, node.y, radius, 0, Math.PI * 2);
             context.fill();
             context.strokeStyle = colors.focus;
-            context.lineWidth = 1;
+            context.lineWidth = node.id === selectedId ? 4 : 1;
             context.stroke();
             context.fillStyle = colors.text;
             context.font = '600 12px system-ui, sans-serif';
@@ -135,11 +137,13 @@ export function createMemoryGraphRenderer(canvas) {
         }
     }
 
-    function render(snapshot) {
+    function render(snapshot, preserveView = false) {
+        const previousSelection = selectedId;
         nodes.clear();
         for (const node of snapshot?.nodes ?? []) nodes.set(node.id, { ...node, x: 0, y: 0 });
         edges = Array.isArray(snapshot?.edges) ? snapshot.edges : [];
-        scale = 1;
+        selectedId = previousSelection && nodes.has(previousSelection) ? previousSelection : undefined;
+        if (!preserveView) scale = 1;
         resetPositions();
         resize();
     }
@@ -173,7 +177,23 @@ export function createMemoryGraphRenderer(canvas) {
         }
     }
 
+    function onPointerUp(event) {
+        const rectangle = canvas.getBoundingClientRect();
+        const x = (event.clientX - rectangle.left - rectangle.width / 2) / scale + rectangle.width / 2;
+        const y = (event.clientY - rectangle.top - rectangle.height / 2) / scale + rectangle.height / 2;
+        let selected;
+        let nearest = Number.POSITIVE_INFINITY;
+        for (const node of nodes.values()) {
+            const distance = Math.hypot(node.x - x, node.y - y);
+            if (distance <= Math.min(10 + node.degree * 1.4, 22) + 10 && distance < nearest) { selected = node; nearest = distance; }
+        }
+        selectedId = selected?.id;
+        draw();
+        if (selected) onSelect?.(selected);
+    }
+
     canvas.addEventListener('keydown', onKeyDown);
+    canvas.addEventListener('pointerup', onPointerUp);
     resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(canvas);
     resize();
@@ -183,9 +203,16 @@ export function createMemoryGraphRenderer(canvas) {
         zoomIn,
         zoomOut,
         reset,
+        selectNode(nodeId) {
+            selectedId = nodes.has(nodeId) ? nodeId : undefined;
+            draw();
+            const selected = selectedId ? nodes.get(selectedId) : undefined;
+            if (selected) onSelect?.(selected);
+        },
         dispose() {
             resizeObserver?.disconnect();
             canvas.removeEventListener('keydown', onKeyDown);
+            canvas.removeEventListener('pointerup', onPointerUp);
             nodes.clear();
             edges = [];
         }

@@ -79,6 +79,43 @@ public sealed partial class LanceDbMemoryStore
         ], routes.Count);
     }
 
+    private static RecordBatch BuildReaderCatalogGenerationBatch(IReadOnlyCollection<PersistedReaderCatalogGenerationRow> generations)
+    {
+        return new RecordBatch(CreateReaderCatalogGenerationSchema(),
+        [
+            Strings(generations.Select(generation => generation.ScopeKey)),
+            Strings(generations.Select(generation => generation.GenerationKey)),
+            Strings(generations.Select(generation => generation.State)),
+            Strings(generations.Select(generation => generation.CreatedAtUtc)),
+            Strings(generations.Select(generation => generation.ReadyAtUtc))
+        ], generations.Count);
+    }
+
+    private static RecordBatch BuildReaderCatalogLeafBatch(IReadOnlyCollection<PersistedReaderCatalogLeafRow> leaves)
+    {
+        return new RecordBatch(CreateReaderCatalogLeafSchema(),
+        [
+            Strings(leaves.Select(leaf => leaf.LeafKey)),
+            Strings(leaves.Select(leaf => leaf.ScopeKey)),
+            Strings(leaves.Select(leaf => leaf.GenerationKey)),
+            Strings(leaves.Select(leaf => leaf.LeafPosition)),
+            Strings(leaves.Select(leaf => leaf.MemoryId)),
+            Strings(leaves.Select(leaf => leaf.RecordType)),
+            Strings(leaves.Select(leaf => leaf.UpdatedAtUtc)),
+            Strings(leaves.Select(leaf => leaf.Version))
+        ], leaves.Count);
+    }
+
+    private static RecordBatch BuildReaderCatalogBuildRunBatch(IReadOnlyCollection<PersistedReaderCatalogBuildRunRow> rows)
+    {
+        return new RecordBatch(CreateReaderCatalogBuildRunSchema(),
+        [
+            Strings(rows.Select(row => row.RowKey)), Strings(rows.Select(row => row.GenerationKey)), Strings(rows.Select(row => row.RunKey)),
+            Strings(rows.Select(row => row.RowPosition)), Strings(rows.Select(row => row.SortKey)), Strings(rows.Select(row => row.MemoryId)),
+            Strings(rows.Select(row => row.RecordType)), Strings(rows.Select(row => row.UpdatedAtUtc)), Strings(rows.Select(row => row.Version))
+        ], rows.Count);
+    }
+
     private static RecordBatch BuildSchemaManifestBatch(IReadOnlyCollection<PersistedSchemaManifestRow> entries)
     {
         if (entries.Count == 0) throw new ArgumentException("A schema manifest batch cannot be empty.", nameof(entries));

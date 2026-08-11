@@ -219,7 +219,13 @@ export function createMemoryUniverse(canvas, selectionSummary, onUnavailable) {
             return;
         }
         const neighborCount = [...(nodeRecords.get(node.id)?.neighbors ?? [])].length;
-        selectionSummary.textContent = `Выбран ${node.label}: тип ${node.type}, степень ${node.degree}, важность ${node.importanceBand} из 5, уверенность ${node.confidenceBand} из 5. Ближайших соседей: ${neighborCount}.`;
+        selectionSummary.replaceChildren(document.createTextNode(`Выбран ${node.label}: тип ${node.type}, степень ${node.degree}, важность ${node.importanceBand} из 5, уверенность ${node.confidenceBand} из 5. Ближайших соседей: ${neighborCount}. `));
+        if (typeof node.href === 'string' && node.href.startsWith('/memory-reader/')) {
+            const link = document.createElement('a');
+            link.href = node.href;
+            link.textContent = 'Открыть запись';
+            selectionSummary.append(link);
+        }
     }
 
     function updateSelection() {
@@ -233,7 +239,9 @@ export function createMemoryUniverse(canvas, selectionSummary, onUnavailable) {
         }
         for (const edge of edgeRecords) {
             const isNeighborEdge = selected && (edge.sourceId === selectedId || edge.targetId === selectedId);
-            edge.material.opacity = selected ? edge.baseOpacity * (isNeighborEdge ? 2.7 : 0.15) : edge.baseOpacity;
+            edge.material.opacity = selected ? (isNeighborEdge ? 1 : 0.16) : edge.baseOpacity;
+            edge.material.linewidth = selected && isNeighborEdge ? 3 : 1;
+            edge.material.color.setHex(selected && isNeighborEdge ? 0xffffff : edge.baseColor);
         }
         announceSelection(selected?.node);
         present();
@@ -297,16 +305,16 @@ export function createMemoryUniverse(canvas, selectionSummary, onUnavailable) {
         if (!source || !targetPosition) return;
         const normalizedWeight = clamp(Math.log2(edge.weight + 1) / 7, 0, 1);
         const material = new THREE.LineBasicMaterial({
-            color: 0x91a0b6,
+            color: 0xa8b7d1,
             transparent: true,
-            opacity: 0.09 + normalizedWeight * 0.2
+            opacity: 0.48 + normalizedWeight * 0.32
         });
         const geometry = new THREE.BufferGeometry().setFromPoints([source, targetPosition]);
         const line = new THREE.Line(geometry, material);
         line.frustumCulled = false;
         scene.add(line);
         sceneObjects.push(line);
-        edgeRecords.push({ ...edge, material, baseOpacity: material.opacity });
+        edgeRecords.push({ ...edge, material, baseOpacity: material.opacity, baseColor: 0xa8b7d1 });
     }
 
     function resetView() {
@@ -320,7 +328,9 @@ export function createMemoryUniverse(canvas, selectionSummary, onUnavailable) {
         updateSelection();
     }
 
-    function render(nextSnapshot) {
+    function render(nextSnapshot, preserveView = false) {
+        const priorView = preserveView ? { yaw: view.yaw, pitch: view.pitch, distance: view.distance, target: target.clone() } : undefined;
+        const priorSelection = selectedId;
         snapshot = nextSnapshot;
         clearScene();
         const { adjacent, positions } = structuralLayout(snapshot);
@@ -328,7 +338,18 @@ export function createMemoryUniverse(canvas, selectionSummary, onUnavailable) {
         for (const position of positions.values()) currentExtent = Math.max(currentExtent, position.length());
         for (const node of snapshot.nodes) addNode(node, positions.get(node.id), adjacent.get(node.id) ?? new Set());
         for (const edge of snapshot.edges) addEdge(edge, positions);
-        resetView();
+        if (!priorView) {
+            resetView();
+            return;
+        }
+        view.yaw = priorView.yaw;
+        view.pitch = priorView.pitch;
+        view.distance = clamp(priorView.distance, MIN_DISTANCE, MAX_DISTANCE);
+        target.copy(priorView.target);
+        selectedId = priorSelection && nodeRecords.has(priorSelection) ? priorSelection : undefined;
+        applyCamera();
+        updateSelection();
+        present();
     }
 
     function zoom(multiplier) {

@@ -145,6 +145,46 @@ public sealed class MemoryGraphQueryServiceTests
         Assert.Empty(faulted.Edges);
     }
 
+    [Fact]
+    public async Task ReadPortion_GrowsFromTwentyFiveToOneHundredFiftyWithOpaqueRoutesAndSafeEdges()
+    {
+        var authorization = new FixedAuthorization();
+        authorization.Allow(TestData.Actor, MemoryOperation.GraphRead, TestData.Scope);
+        var source = new TestGraphSource
+        {
+            Records = Enumerable.Range(0, 150)
+                .Select(index => Record($"memory-{index:D3}", TestData.Scope, entities: ["shared"]))
+                .ToArray()
+        };
+        var reader = new GraphReaderSource();
+        var service = new MemoryGraphQueryService(source, authorization, new TestClock(TestData.Now), TestData.ContractVersion, reader);
+
+        var first = await service.ReadPortionAsync(new(TestData.Actor, TestData.Scope, null, TestData.ContractVersion), default);
+        var second = await service.ReadPortionAsync(new(TestData.Actor, TestData.Scope, first.NextCursor, TestData.ContractVersion), default);
+        var sixth = await service.ReadPortionAsync(new(TestData.Actor, TestData.Scope,
+            new(first.NextCursor!.GenerationKey, 6), TestData.ContractVersion), default);
+        var changed = await service.ReadPortionAsync(new(TestData.Actor, TestData.Scope,
+            new("other-generation", 2), TestData.ContractVersion), default);
+
+        Assert.Equal(MemoryGraphPortionState.Available, first.State);
+        Assert.Equal(25, first.Nodes.Count);
+        Assert.Equal(50, second.Nodes.Count);
+        Assert.Equal(150, sixth.Nodes.Count);
+        Assert.All(sixth.Edges, edge =>
+        {
+            Assert.Equal(MemoryGraphEdgeKind.SharedEntity, edge.Kind);
+            Assert.Contains(sixth.Nodes, node => node.NodeKey == edge.FirstNodeKey);
+            Assert.Contains(sixth.Nodes, node => node.NodeKey == edge.SecondNodeKey);
+        });
+        Assert.All(sixth.Nodes, node =>
+        {
+            Assert.StartsWith("/memory-reader/route-", node.RecordHref, StringComparison.Ordinal);
+            Assert.DoesNotContain("/memory-reader/memory-", node.RecordHref, StringComparison.Ordinal);
+        });
+        Assert.Null(sixth.NextCursor);
+        Assert.Equal(MemoryGraphPortionState.Changed, changed.State);
+    }
+
     private static MemoryGraphQueryService Service(TestGraphSource source, FixedAuthorization authorization) => new(
         source, authorization, new TestClock(TestData.Now), TestData.ContractVersion);
 
@@ -184,5 +224,19 @@ public sealed class MemoryGraphQueryServiceTests
                 return Task.FromException<IReadOnlyList<MemoryGraphSourceRecord>>(Failure);
             return Task.FromResult(Records);
         }
+    }
+
+    private sealed class GraphReaderSource : IMemoryReaderSource
+    {
+        private int _route;
+
+        public Task<MemoryReaderSourceRecord?> ReadByIdAsync(MemorySearchEligibility eligibility, MemoryId memoryId, CancellationToken cancellationToken) =>
+            Task.FromResult<MemoryReaderSourceRecord?>(null);
+
+        public Task<MemoryReaderRoute> GetOrCreateRouteAsync(MemoryId memoryId, CancellationToken cancellationToken) =>
+            Task.FromResult(new MemoryReaderRoute($"route-{++_route:D3}", memoryId));
+
+        public Task<MemoryId?> ResolveRouteAsync(string routeKey, CancellationToken cancellationToken) =>
+            Task.FromResult<MemoryId?>(null);
     }
 }

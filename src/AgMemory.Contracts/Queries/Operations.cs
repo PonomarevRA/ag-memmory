@@ -13,5 +13,6 @@ public enum MemoryOperation
     BuildContext,
     ReadHotMemory,
     GraphRead,
-    ReaderRead
+    ReaderRead,
+    ReaderCatalogRead
 }

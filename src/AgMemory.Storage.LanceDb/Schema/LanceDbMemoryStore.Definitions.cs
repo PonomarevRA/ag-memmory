@@ -36,6 +36,9 @@ public sealed partial class LanceDbMemoryStore
         yield return new LanceDbTableSchemaDefinition(ReceiptsTable, CurrentStorageSchemaVersion, CreateReceiptSchema());
         yield return new LanceDbTableSchemaDefinition(OutboxTable, CurrentStorageSchemaVersion, CreateOutboxSchema());
         yield return new LanceDbTableSchemaDefinition(ReaderRoutesTable, CurrentStorageSchemaVersion, CreateReaderRouteSchema());
+        yield return new LanceDbTableSchemaDefinition(ReaderCatalogGenerationsTable, CurrentStorageSchemaVersion, CreateReaderCatalogGenerationSchema());
+        yield return new LanceDbTableSchemaDefinition(ReaderCatalogLeavesTable, CurrentStorageSchemaVersion, CreateReaderCatalogLeafSchema());
+        yield return new LanceDbTableSchemaDefinition(ReaderCatalogBuildRunsTable, CurrentStorageSchemaVersion, CreateReaderCatalogBuildRunSchema());
     }
 
     private static LanceDbTableSchemaDefinition VectorTableDefinition(EmbeddingReference embedding)
@@ -66,6 +69,12 @@ public sealed partial class LanceDbMemoryStore
             return new LanceDbTableSchemaDefinition(OutboxTable, CurrentStorageSchemaVersion, CreateOutboxSchema());
         if (string.Equals(entry.TableName, ReaderRoutesTable, StringComparison.Ordinal))
             return new LanceDbTableSchemaDefinition(ReaderRoutesTable, CurrentStorageSchemaVersion, CreateReaderRouteSchema());
+        if (string.Equals(entry.TableName, ReaderCatalogGenerationsTable, StringComparison.Ordinal))
+            return new LanceDbTableSchemaDefinition(ReaderCatalogGenerationsTable, CurrentStorageSchemaVersion, CreateReaderCatalogGenerationSchema());
+        if (string.Equals(entry.TableName, ReaderCatalogLeavesTable, StringComparison.Ordinal))
+            return new LanceDbTableSchemaDefinition(ReaderCatalogLeavesTable, CurrentStorageSchemaVersion, CreateReaderCatalogLeafSchema());
+        if (string.Equals(entry.TableName, ReaderCatalogBuildRunsTable, StringComparison.Ordinal))
+            return new LanceDbTableSchemaDefinition(ReaderCatalogBuildRunsTable, CurrentStorageSchemaVersion, CreateReaderCatalogBuildRunSchema());
 
         if (entry.Embedding is null || !entry.TableName.StartsWith("memory_vectors_", StringComparison.Ordinal))
         {
@@ -151,6 +160,37 @@ public sealed partial class LanceDbMemoryStore
     private static Schema CreateReaderRouteSchema() => new Schema.Builder()
         .Field(new Field("route_key", StringType.Default, nullable: false))
         .Field(new Field("memory_id", StringType.Default, nullable: false))
+        .Build();
+
+    private static Schema CreateReaderCatalogGenerationSchema() => new Schema.Builder()
+        .Field(new Field("scope_key", StringType.Default, nullable: false))
+        .Field(new Field("generation_key", StringType.Default, nullable: false))
+        .Field(new Field("state", StringType.Default, nullable: false))
+        .Field(new Field("created_at_utc", StringType.Default, nullable: false))
+        .Field(new Field("ready_at_utc", StringType.Default, nullable: true))
+        .Build();
+
+    private static Schema CreateReaderCatalogLeafSchema() => new Schema.Builder()
+        .Field(new Field("leaf_key", StringType.Default, nullable: false))
+        .Field(new Field("scope_key", StringType.Default, nullable: false))
+        .Field(new Field("generation_key", StringType.Default, nullable: false))
+        .Field(new Field("leaf_position", StringType.Default, nullable: false))
+        .Field(new Field("memory_id", StringType.Default, nullable: false))
+        .Field(new Field("record_type", StringType.Default, nullable: false))
+        .Field(new Field("updated_at_utc", StringType.Default, nullable: false))
+        .Field(new Field("version", StringType.Default, nullable: false))
+        .Build();
+
+    private static Schema CreateReaderCatalogBuildRunSchema() => new Schema.Builder()
+        .Field(new Field("row_key", StringType.Default, nullable: false))
+        .Field(new Field("generation_key", StringType.Default, nullable: false))
+        .Field(new Field("run_key", StringType.Default, nullable: false))
+        .Field(new Field("row_position", StringType.Default, nullable: false))
+        .Field(new Field("sort_key", StringType.Default, nullable: false))
+        .Field(new Field("memory_id", StringType.Default, nullable: false))
+        .Field(new Field("record_type", StringType.Default, nullable: false))
+        .Field(new Field("updated_at_utc", StringType.Default, nullable: false))
+        .Field(new Field("version", StringType.Default, nullable: false))
         .Build();
 
     private static bool IsNullableMemoryColumn(string column) => column is

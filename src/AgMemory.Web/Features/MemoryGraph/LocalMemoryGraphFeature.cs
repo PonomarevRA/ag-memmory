@@ -1,6 +1,8 @@
 using AgMemory.Contracts;
 using AgMemory.Core;
 using AgMemory.Storage.LanceDb;
+using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace AgMemory.Web.Features.MemoryGraph;
 
@@ -13,13 +15,20 @@ public sealed class LocalMemoryGraphFeature : IAsyncDisposable
     private static readonly ContractVersion ContractVersion = new("memory-graph-v1");
     private readonly MemoryGraphHostConfiguration? _configuration;
     private readonly object _sync = new();
+    private readonly IDataProtector _navigationProtector;
     private LanceDbMemoryStore? _store;
     private MemoryGraphQueryService? _query;
 
-    public LocalMemoryGraphFeature(MemoryGraphHostOptions options, string contentRootPath)
+    public LocalMemoryGraphFeature(MemoryGraphHostOptions options, string contentRootPath, IDataProtectionProvider dataProtection)
     {
         ArgumentNullException.ThrowIfNull(options);
         _configuration = options.TryCreate(contentRootPath);
+        _navigationProtector = dataProtection.CreateProtector("AgMemory.Web.MemoryGraph.Navigation.v1");
+    }
+
+    public LocalMemoryGraphFeature(MemoryGraphHostOptions options, string contentRootPath)
+        : this(options, contentRootPath, DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(contentRootPath, "data-protection"))))
+    {
     }
 
     public bool IsConfigured => _configuration is not null;
@@ -35,6 +44,28 @@ public sealed class LocalMemoryGraphFeature : IAsyncDisposable
             MemoryGraphLimits.MaximumVisibleNodes,
             MemoryGraphLimits.MaximumEdges,
             ContractVersion), cancellationToken);
+    }
+
+    public Task<MemoryGraphPortion> ReadPortionAsync(MemoryGraphPortionCursor? cursor, CancellationToken cancellationToken)
+    {
+        var configuration = _configuration ?? throw new InvalidOperationException("The local memory graph is unavailable.");
+        return GetOrCreateQuery(configuration).ReadPortionAsync(new(configuration.Actor, configuration.Scope, cursor, ContractVersion), cancellationToken);
+    }
+
+    public string? ProtectContinuation(MemoryGraphPortionCursor? cursor) => cursor is null ? null : _navigationProtector.Protect(
+        JsonSerializer.Serialize(new GraphNavigationToken("memory-graph-navigation-v1", cursor.GenerationKey, cursor.NextPortion), new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+    public bool TryUnprotectContinuation(string token, out MemoryGraphPortionCursor? cursor)
+    {
+        cursor = null;
+        try
+        {
+            var value = JsonSerializer.Deserialize<GraphNavigationToken>(_navigationProtector.Unprotect(token), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            if (value is null || value.SchemaVersion != "memory-graph-navigation-v1" || string.IsNullOrWhiteSpace(value.GenerationKey) || value.NextPortion <= 0) return false;
+            cursor = new(value.GenerationKey, value.NextPortion);
+            return true;
+        }
+        catch { return false; }
     }
 
     /// <summary>Reads safe aggregate diagnostics from the same configured local store and exact scope as the graph.</summary>
@@ -90,10 +121,13 @@ public sealed class LocalMemoryGraphFeature : IAsyncDisposable
                 _store,
                 new ExactLocalGraphAuthorization(configuration),
                 new SystemClock(),
-                ContractVersion);
+                ContractVersion,
+                _store);
             return _query;
         }
     }
+
+    private sealed record GraphNavigationToken(string SchemaVersion, string GenerationKey, int NextPortion);
 
     private LanceDbMemoryStore GetOrCreateStore(MemoryGraphHostConfiguration configuration)
     {

@@ -13,7 +13,7 @@ namespace AgMemory.Storage.LanceDb;
 /// Local LanceDB implementation of the provider-neutral durable-memory and search ports.
 /// LanceDB, Arrow schemas and SQL-like predicates are deliberately implementation details.
 /// </summary>
-public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSource, IMemoryReaderSource, IVectorSearch, ILexicalSearch, IAsyncDisposable
+public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSource, IMemoryReaderSource, IMemoryReaderCatalogSource, IVectorSearch, ILexicalSearch, IAsyncDisposable
 {
     /// <summary>The initial, fail-closed schema policy for tables owned by this adapter.</summary>
     public const string CurrentStorageSchemaVersion = "1.0";
@@ -23,6 +23,9 @@ public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSourc
     private const string ReceiptsTable = "idempotency_receipts";
     private const string OutboxTable = "outbox_messages";
     private const string ReaderRoutesTable = "memory_reader_routes";
+    private const string ReaderCatalogGenerationsTable = "memory_reader_catalog_generations";
+    private const string ReaderCatalogLeavesTable = "memory_reader_catalog_leaves";
+    private const string ReaderCatalogBuildRunsTable = "memory_reader_catalog_build_runs";
     private const string SchemaManifestTable = "agmemory_schema_manifest";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] MemoryColumnNames =
@@ -41,6 +44,18 @@ public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSourc
     [
         "id", "tenant_id", "project_id", "workspace_id", "chat_id", "run_id", "record_type", "status",
         "canonical_text", "created_at_utc", "updated_at_utc", "version", "expires_at_utc"
+    ];
+    private static readonly string[] ReaderCatalogGenerationColumnNames =
+    [
+        "scope_key", "generation_key", "state", "created_at_utc", "ready_at_utc"
+    ];
+    private static readonly string[] ReaderCatalogLeafColumnNames =
+    [
+        "leaf_key", "scope_key", "generation_key", "leaf_position", "memory_id", "record_type", "updated_at_utc", "version"
+    ];
+    private static readonly string[] ReaderCatalogBuildRunColumnNames =
+    [
+        "row_key", "generation_key", "run_key", "row_position", "sort_key", "memory_id", "record_type", "updated_at_utc", "version"
     ];
 
     private readonly LanceDbMemoryStoreOptions _options;

@@ -50,7 +50,8 @@ builder.Services.AddSingleton<IModelChatGateway, OpenAiCompatibleChatGateway>();
 builder.Services.AddScoped<BrowserStateInterop>();
 var memoryGraphOptions = builder.Configuration.GetSection(MemoryGraphHostOptions.SectionName).Get<MemoryGraphHostOptions>() ?? new();
 var memoryReaderOptions = builder.Configuration.GetSection(MemoryReaderHostOptions.SectionName).Get<MemoryReaderHostOptions>() ?? new();
-builder.Services.AddSingleton(new LocalMemoryGraphFeature(memoryGraphOptions, applicationDataDirectory));
+builder.Services.AddSingleton<LocalMemoryGraphFeature>(services => new(memoryGraphOptions, applicationDataDirectory,
+    services.GetRequiredService<IDataProtectionProvider>()));
 builder.Services.AddSingleton(new LocalChatMemoryFeature(memoryGraphOptions, applicationDataDirectory));
 builder.Services.AddSingleton<LocalMemoryReaderFeature>(services => new(
     memoryReaderOptions,
@@ -82,8 +83,11 @@ app.UseRateLimiter();
 app.MapStaticAssets();
 app.MapPost(ChatEndpoint.Route, ChatEndpoint.HandleAsync)
     .RequireRateLimiting(ChatEndpoint.RateLimitPolicy);
-app.MapGet(MemoryGraphEndpoint.Route, MemoryGraphEndpoint.HandleAsync);
+app.MapGet(MemoryGraphEndpoint.Route, (HttpContext context, string? continuation, IHostEnvironment environment,
+    LocalMemoryGraphFeature feature, CancellationToken cancellationToken) =>
+    MemoryGraphEndpoint.HandleAsync(context, environment, feature, cancellationToken, continuation));
 app.MapGet(MemoryStatusEndpoint.Route, MemoryStatusEndpoint.HandleAsync);
+app.MapGet(MemoryReaderEndpoint.CatalogRoute, MemoryReaderEndpoint.HandleCatalogAsync);
 app.MapGet(MemoryReaderEndpoint.HomeRoute, MemoryReaderEndpoint.HandleHomeAsync);
 app.MapGet(MemoryReaderEndpoint.DocumentRoute, MemoryReaderEndpoint.HandleDocumentAsync);
 app.MapRazorComponents<App>()

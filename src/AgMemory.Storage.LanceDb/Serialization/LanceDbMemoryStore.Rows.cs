@@ -59,11 +59,13 @@ public sealed partial class LanceDbMemoryStore
             var embedding = Optional("embedding_json") is { } embeddingJson && !string.Equals(embeddingJson, "null", StringComparison.OrdinalIgnoreCase)
                 ? PersistedEmbedding.ToModel(Deserialize<PersistedEmbedding>(embeddingJson))
                 : null;
-            var vector = embedding is null
-                ? null
-                : Optional("embedding_vector_json") is { } vectorJson && !string.Equals(vectorJson, "null", StringComparison.OrdinalIgnoreCase)
+            ReadOnlyMemory<float>? vector = null;
+            if (embedding is not null)
+            {
+                vector = Optional("embedding_vector_json") is { } vectorJson
                     ? Deserialize<float[]>(vectorJson)
                     : Vector;
+            }
             var record = new MemoryRecord(
                 new MemoryId(Required("id")),
                 Scope(Values),
@@ -79,11 +81,11 @@ public sealed partial class LanceDbMemoryStore
                 long.Parse(Required("version"), CultureInfo.InvariantCulture),
                 Deserialize<string[]>(Required("entities_json")),
                 PersistedProvenance.ToModel(Deserialize<PersistedProvenance>(Required("provenance_json"))),
-                embedding,
-                Optional("expires_at_utc") is { } expires ? ParseUtc(expires) : null,
-                Required("deduplication_key"),
-                Optional("decision_details_json") is { } decision ? Deserialize<DecisionDetails>(decision) : null,
-                vector);
+                Embedding: embedding,
+                ExpiresAt: Optional("expires_at_utc") is { } expires ? ParseUtc(expires) : null,
+                DeduplicationKey: Required("deduplication_key"),
+                DecisionDetails: Optional("decision_details_json") is { } decision ? Deserialize<DecisionDetails>(decision) : null,
+                EmbeddingVector: vector);
             ValidateMemoryRecordForSchema(record);
             return record;
         }
@@ -99,7 +101,10 @@ public sealed partial class LanceDbMemoryStore
             Optional("expires_at_utc") is { } expires ? ParseUtc(expires) : null);
 
         private string Required(string key) => Optional(key) ?? throw new InvalidDataException($"Required LanceDB column '{key}' is null.");
-        private string? Optional(string key) => string.IsNullOrWhiteSpace(Values[key]) ? null : Values[key];
+        private string? Optional(string key) => string.IsNullOrWhiteSpace(Values[key]) ||
+                                                 string.Equals(Values[key], "null", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : Values[key];
     }
 
     private sealed record PersistedHotMemoryRow(
@@ -312,6 +317,59 @@ public sealed partial class LanceDbMemoryStore
     private static IEnumerable<PersistedReaderRouteRow> ReadReaderRouteRows(RecordBatch batch)
     {
         for (var index = 0; index < batch.Length; index++) yield return PersistedReaderRouteRow.Read(batch, index);
+    }
+
+    private sealed record PersistedReaderCatalogGenerationRow(
+        string ScopeKey,
+        string GenerationKey,
+        string State,
+        string CreatedAtUtc,
+        string? ReadyAtUtc)
+    {
+        public static PersistedReaderCatalogGenerationRow Read(RecordBatch batch, int index) => new(
+            Required(batch, "scope_key", index),
+            Required(batch, "generation_key", index),
+            Required(batch, "state", index),
+            Required(batch, "created_at_utc", index),
+            Value(batch, "ready_at_utc", index));
+    }
+
+    private sealed record PersistedReaderCatalogLeafRow(
+        string LeafKey,
+        string ScopeKey,
+        string GenerationKey,
+        string LeafPosition,
+        string MemoryId,
+        string RecordType,
+        string UpdatedAtUtc,
+        string Version)
+    {
+        public static PersistedReaderCatalogLeafRow Read(RecordBatch batch, int index) => new(
+            Required(batch, "leaf_key", index),
+            Required(batch, "scope_key", index),
+            Required(batch, "generation_key", index),
+            Required(batch, "leaf_position", index),
+            Required(batch, "memory_id", index),
+            Required(batch, "record_type", index),
+            Required(batch, "updated_at_utc", index),
+            Required(batch, "version", index));
+    }
+
+    private sealed record PersistedReaderCatalogBuildRunRow(
+        string RowKey,
+        string GenerationKey,
+        string RunKey,
+        string RowPosition,
+        string SortKey,
+        string MemoryId,
+        string RecordType,
+        string UpdatedAtUtc,
+        string Version)
+    {
+        public static PersistedReaderCatalogBuildRunRow Read(RecordBatch batch, int index) => new(
+            Required(batch, "row_key", index), Required(batch, "generation_key", index), Required(batch, "run_key", index),
+            Required(batch, "row_position", index), Required(batch, "sort_key", index), Required(batch, "memory_id", index),
+            Required(batch, "record_type", index), Required(batch, "updated_at_utc", index), Required(batch, "version", index));
     }
 
     private static float[]? TryReadVector(RecordBatch batch, int index)

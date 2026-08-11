@@ -35,3 +35,11 @@ objects:
     tags: [web-ui, codex, mcp, memory, token-economy]
     recorded: "2026-08-09"
     updated: "2026-08-09"
+  - id: web-ui.outcome.shared-brand-icon
+    title: Delivered shared browser and macOS standalone app icon
+    status: completed
+    summary: One SVG mark now supplies the Web icon set and deterministic local macOS ICNS packaging.
+    path: shared-brand-icon.a2a.yaml
+    tags: [web-ui, branding, macos, packaging, icons]
+    recorded: "2026-08-10"
+    updated: "2026-08-10"

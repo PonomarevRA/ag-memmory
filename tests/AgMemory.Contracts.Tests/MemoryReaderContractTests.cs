@@ -7,24 +7,28 @@ namespace AgMemory.Contracts.Tests;
 public sealed class MemoryReaderContractTests
 {
     [Fact]
-    public void ReaderRead_UsesDedicatedQueryAndSourcePorts()
+    public void ReaderRead_UsesDedicatedDocumentAndCatalogPorts()
     {
         Assert.Contains(MemoryOperation.ReaderRead, Enum.GetValues<MemoryOperation>());
+        Assert.Contains(MemoryOperation.ReaderCatalogRead, Enum.GetValues<MemoryOperation>());
         AssertParameter(typeof(IMemoryReaderQueryService), nameof(IMemoryReaderQueryService.ReadHomeAsync), typeof(MemoryReaderHomeRequest));
         AssertParameter(typeof(IMemoryReaderQueryService), nameof(IMemoryReaderQueryService.ReadDocumentAsync), typeof(MemoryReaderDocumentRequest));
+        AssertParameter(typeof(IMemoryReaderCatalogQueryService), nameof(IMemoryReaderCatalogQueryService.BrowseAsync), typeof(MemoryReaderCatalogRequest));
         AssertParameter(typeof(IMemoryReaderSource), nameof(IMemoryReaderSource.ReadByIdAsync), typeof(MemorySearchEligibility));
-        Assert.DoesNotContain(typeof(IMemoryReaderQueryService).GetMethods(), method => method.Name.Contains("Index", StringComparison.Ordinal));
-        Assert.DoesNotContain(typeof(IMemoryReaderSource).GetMethods(), method => method.Name.Contains("Page", StringComparison.Ordinal));
+        AssertParameter(typeof(IMemoryReaderCatalogSource), nameof(IMemoryReaderCatalogSource.ReadBuildPortionAsync), typeof(MemoryReaderCatalogBuildRequest));
+        AssertParameter(typeof(IMemoryReaderCatalogSource), nameof(IMemoryReaderCatalogSource.ReadReadyLeafPageAsync), typeof(MemoryReaderCatalogCursor));
     }
 
     [Fact]
     public void ReaderLimits_AreFixedAndBounded()
     {
         Assert.Equal(8, MemoryReaderLimits.BlocksPerPage);
+        Assert.Equal(20, MemoryReaderLimits.DocumentsPerPage);
         Assert.Equal(256, MemoryReaderLimits.MaximumBlocksPerDocument);
         Assert.Equal(64, MemoryReaderLimits.MaximumLinksPerBlock);
         Assert.Equal(8_000, MemoryReaderLimits.MaximumBlockCharacters);
         Assert.Equal(120_000, MemoryReaderLimits.MaximumDocumentCharacters);
+        Assert.Equal(320, MemoryReaderLimits.MaximumCatalogPreviewCharacters);
     }
 
     [Fact]
@@ -38,6 +42,7 @@ public sealed class MemoryReaderContractTests
 
         AssertNoPageLimit(typeof(MemoryReaderHomeRequest));
         AssertNoPageLimit(typeof(MemoryReaderDocumentRequest));
+        AssertNoPageLimit(typeof(MemoryReaderCatalogRequest));
     }
 
     [Fact]
@@ -72,13 +77,58 @@ public sealed class MemoryReaderContractTests
     [Fact]
     public void ReaderSourceProjection_HasNoEmbeddingOrGeneralMemoryRecordPayload()
     {
-        var properties = typeof(MemoryReaderSourceRecord).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var sourceTypes = new[] { typeof(MemoryReaderSourceRecord), typeof(MemoryReaderCatalogSourceRecord) };
 
-        Assert.DoesNotContain(properties, property => property.PropertyType == typeof(MemoryRecord));
-        Assert.DoesNotContain(properties, property => property.PropertyType == typeof(EmbeddingReference));
-        Assert.DoesNotContain(properties, property => property.PropertyType == typeof(ReadOnlyMemory<float>));
-        Assert.DoesNotContain(properties, property => property.PropertyType == typeof(ReadOnlyMemory<float>?));
-        Assert.DoesNotContain(properties, property => property.Name.Contains("Embedding", StringComparison.Ordinal));
+        foreach (var sourceType in sourceTypes)
+        {
+            var properties = sourceType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            Assert.DoesNotContain(properties, property => property.PropertyType == typeof(MemoryRecord));
+            Assert.DoesNotContain(properties, property => property.PropertyType == typeof(EmbeddingReference));
+            Assert.DoesNotContain(properties, property => property.PropertyType == typeof(ReadOnlyMemory<float>));
+            Assert.DoesNotContain(properties, property => property.PropertyType == typeof(ReadOnlyMemory<float>?));
+            Assert.DoesNotContain(properties, property => property.Name.Contains("Embedding", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void CatalogModels_KeepAuthorityAndDurableIdentifiersOutOfBrowserPages()
+    {
+        var browserTypes = new[] { typeof(MemoryReaderCatalogDocument), typeof(MemoryReaderCatalogPage) };
+        var prohibitedTypes = new[] { typeof(ActorId), typeof(MemoryScope), typeof(MemoryId), typeof(MemoryReaderCatalogSourceRecord) };
+
+        foreach (var browserType in browserTypes)
+        {
+            var properties = browserType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            Assert.DoesNotContain(properties, property => prohibitedTypes.Contains(property.PropertyType));
+            Assert.DoesNotContain(properties, property => property.Name.Contains("Limit", StringComparison.Ordinal));
+        }
+
+        Assert.Equal(typeof(MemoryReaderCatalogCursor),
+            typeof(MemoryReaderCatalogPage).GetProperty(nameof(MemoryReaderCatalogPage.NextCursor))!.PropertyType);
+        Assert.Contains(MemoryReaderCatalogState.CatalogNotReady, Enum.GetValues<MemoryReaderCatalogState>());
+    }
+
+    [Fact]
+    public void CatalogStatesRemainDistinct_AndExistingHomeReaderPortRemainsUnchanged()
+    {
+        Assert.Equal(
+        [
+            MemoryReaderCatalogState.Available,
+            MemoryReaderCatalogState.Stale,
+            MemoryReaderCatalogState.Changed,
+            MemoryReaderCatalogState.NotFound,
+            MemoryReaderCatalogState.Unavailable,
+            MemoryReaderCatalogState.CatalogNotReady
+        ],
+        Enum.GetValues<MemoryReaderCatalogState>());
+
+        Assert.Equal(
+            [nameof(IMemoryReaderQueryService.ReadDocumentAsync), nameof(IMemoryReaderQueryService.ReadHomeAsync)],
+            typeof(IMemoryReaderQueryService).GetMethods().Select(method => method.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(
+            [nameof(MemoryReaderHomeRequest.Actor), nameof(MemoryReaderHomeRequest.RequestedScope), nameof(MemoryReaderHomeRequest.HomeMemoryId), nameof(MemoryReaderHomeRequest.ContractVersion)],
+            typeof(MemoryReaderHomeRequest).GetProperties(BindingFlags.Public | BindingFlags.Instance).Select(property => property.Name));
+        Assert.Equal(8, MemoryReaderLimits.BlocksPerPage);
     }
 
     [Fact]
@@ -88,11 +138,14 @@ public sealed class MemoryReaderContractTests
         var readerTypes = new[]
         {
             typeof(IMemoryReaderQueryService),
+            typeof(IMemoryReaderCatalogQueryService),
             typeof(IMemoryReaderSource),
+            typeof(IMemoryReaderCatalogSource),
             typeof(MemoryReaderLimits),
             typeof(MemoryReaderHomeRequest),
             typeof(MemoryReaderDocumentRequest),
-            typeof(MemoryReaderDocumentPage)
+            typeof(MemoryReaderDocumentPage),
+            typeof(MemoryReaderCatalogPage)
         };
 
         Assert.DoesNotContain(assembly.GetReferencedAssemblies(), reference =>
