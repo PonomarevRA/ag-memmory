@@ -1,0 +1,22 @@
+schema: agent-memory-object/v1
+id: memory-reader.outcome.derived-wiki-facets
+kind: outcome
+area: memory-reader
+status: superseded
+title: Delivered bounded derived Wiki facets for the reader
+summary: Reader adds type namespaces and entity-tag facets without expanding exact-scope or opaque-navigation boundaries.
+recorded: "2026-08-11"
+updated: "2026-08-11"
+tags: [memory-reader, wiki, facets, tags, pagination]
+sources:
+  - kind: code
+    ref: src/AgMemory.Core/Reader/MemoryReaderCatalogQueryService.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryReader/MemoryReaderPage.razor
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/MemoryReaderEndpointTests.cs
+payload:
+  change: Added derived type and entity-tag filters, safe facet UI, and protected continuations bound to the selected filter.
+  measurement: Contracts, Core, Storage, and Web targeted suites passed; Web accessibility regression covers active facets.
+  result: Existing exact-scope catalog records can be browsed through bounded Wiki facets without a storage migration.
+  next_action: Replaced by explicit metadata-backed tags and Wiki relations to avoid raw entity disclosure.

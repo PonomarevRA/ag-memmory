@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 using Apache.Arrow;
 using AgMemory.Contracts;
 
@@ -97,7 +99,8 @@ public sealed partial class LanceDbMemoryStore
                 record.CreatedAt,
                 record.UpdatedAt,
                 record.Version,
-                record.ExpiresAt))
+                record.ExpiresAt,
+                record.Entities))
             .GroupBy(record => record.MemoryId)
             .Select(group => group.First())
             .OrderBy(record => record.CreatedAt)
@@ -145,6 +148,7 @@ public sealed partial class LanceDbMemoryStore
         }
         if (merged is not null)
             await PersistCatalogLeavesFromRunAsync(generation, merged, cancellationToken).ConfigureAwait(false);
+        await BuildWikiLeavesAsync(scope, generation, eligibility, cancellationToken).ConfigureAwait(false);
 
         var ready = generation with { State = "Ready", ReadyAtUtc = Utc(DateTimeOffset.UtcNow) };
         await PersistCatalogGenerationAsync(ready, cancellationToken).ConfigureAwait(false);
@@ -337,6 +341,181 @@ public sealed partial class LanceDbMemoryStore
             .WhenNotMatchedInsertAll()
             .Execute(BuildReaderCatalogLeafBatch(leaves))
             .ConfigureAwait(false);
+    }
+
+    private static readonly Regex WikiDocumentLink = new(@"\[\[(?<kind>doc|related):(?<path>[a-z0-9-]+(?:/[a-z0-9-]+)*)\|(?<label>[^\]\r\n]{1,160})\]\]", RegexOptions.CultureInvariant);
+
+    private async Task BuildWikiLeavesAsync(MemoryScope scope, PersistedReaderCatalogGenerationRow generation,
+        MemorySearchEligibility eligibility, CancellationToken cancellationToken)
+    {
+        MemoryReaderCatalogBuildCursor? cursor = null;
+        var entitiesByMemoryId = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+        while (true)
+        {
+            var portion = await ReadCatalogBuildPortionCoreAsync(eligibility, cursor, cancellationToken).ConfigureAwait(false);
+            var documents = new List<PersistedReaderWikiDocumentRow>(portion.Records.Count);
+            foreach (var record in portion.Records)
+            {
+                entitiesByMemoryId[record.MemoryId.Value] = NormalizeEntities(record.Entities);
+                var metadata = await ReadWikiMetadataCoreAsync(scope, record.MemoryId, record.Version, cancellationToken).ConfigureAwait(false);
+                documents.Add(new($"{generation.GenerationKey}:{record.MemoryId.Value}", generation.GenerationKey, record.MemoryId.Value,
+                    record.Version.ToString(CultureInfo.InvariantCulture), metadata?.Title ?? WikiFallbackTitle(record.CanonicalText),
+                    metadata?.Namespace ?? "inbox", metadata?.Slug));
+            }
+            await PersistWikiDocumentsAsync(documents, cancellationToken).ConfigureAwait(false);
+            if (portion.NextCursor is null) break;
+            cursor = portion.NextCursor;
+        }
+
+        var relations = new WikiRelationAccumulator(generation.GenerationKey);
+        cursor = null;
+        while (true)
+        {
+            var portion = await ReadCatalogBuildPortionCoreAsync(eligibility, cursor, cancellationToken).ConfigureAwait(false);
+            foreach (var record in portion.Records)
+            {
+                foreach (Match link in WikiDocumentLink.Matches(record.CanonicalText))
+                {
+                    var path = link.Groups["path"].Value;
+                    var separator = path.LastIndexOf('/');
+                    if (separator <= 0 || separator == path.Length - 1) continue;
+                    var target = await ReadWikiDocumentBySlugCoreAsync(generation.GenerationKey, path[..separator], path[(separator + 1)..], cancellationToken).ConfigureAwait(false);
+                    if (target is null || target.MemoryId == record.MemoryId.Value) continue;
+                    var label = link.Groups["label"].Value;
+                    var sharedEntityCount = SharedEntityCount(record.Entities, entitiesByMemoryId.GetValueOrDefault(target.MemoryId));
+                    if (link.Groups["kind"].Value == "doc")
+                    {
+                        relations.Add(record.MemoryId.Value, target.MemoryId, MemoryWikiRelationKind.Child, label, sharedEntityCount);
+                        relations.Add(target.MemoryId, record.MemoryId.Value, MemoryWikiRelationKind.Backlink, label, sharedEntityCount);
+                    }
+                    else
+                    {
+                        relations.Add(record.MemoryId.Value, target.MemoryId, MemoryWikiRelationKind.Related, label, sharedEntityCount);
+                        relations.Add(target.MemoryId, record.MemoryId.Value, MemoryWikiRelationKind.Related, label, sharedEntityCount);
+                    }
+                }
+            }
+            if (portion.NextCursor is null) break;
+            cursor = portion.NextCursor;
+        }
+
+        foreach (var batch in relations.Rows().Chunk(MemoryReaderLimits.DocumentsPerPage))
+            await PersistWikiRelationsAsync(batch, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string WikiFallbackTitle(string text)
+    {
+        var title = text.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.StartsWith("# ", StringComparison.Ordinal))?[2..].Trim();
+        title ??= text.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        if (title.Length == 0) title = "Запись без текста";
+        return title.Length <= MemoryWikiLimits.MaximumTitleCharacters ? title : string.Concat(title.AsSpan(0, MemoryWikiLimits.MaximumTitleCharacters - 1), "…");
+    }
+
+    private static IReadOnlySet<string> NormalizeEntities(IReadOnlyList<string> entities) => entities
+        .Select(entity => entity.Trim().ToLowerInvariant())
+        .Where(entity => entity.Length is > 0 and <= MemoryReaderLimits.MaximumCatalogTagEntityCharacters)
+        .ToHashSet(StringComparer.Ordinal);
+
+    private static int SharedEntityCount(IReadOnlyList<string> source, IReadOnlySet<string>? target)
+    {
+        if (target is null || target.Count == 0) return 0;
+        return NormalizeEntities(source).Count(target.Contains);
+    }
+
+    private static PersistedReaderWikiRelationRow WikiRelation(string generation, string source, string target, MemoryWikiRelationKind kind, string label, int sharedEntityCount) =>
+        new(Hash($"{generation}\u001f{source}\u001f{target}\u001f{kind}"), generation, source, target, kind.ToString(), label,
+            sharedEntityCount.ToString(CultureInfo.InvariantCulture));
+
+    /// <summary>Keeps relation generation bounded and stable even when a target is encountered in later source portions.</summary>
+    private sealed class WikiRelationAccumulator(string generation)
+    {
+        private readonly Dictionary<string, RelationBucket> _children = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, RelationBucket> _related = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, RelationBucket> _backlinks = new(StringComparer.Ordinal);
+
+        public void Add(string source, string target, MemoryWikiRelationKind kind, string label, int sharedEntityCount = 0)
+        {
+            var buckets = kind switch
+            {
+                MemoryWikiRelationKind.Child => _children,
+                MemoryWikiRelationKind.Related => _related,
+                _ => _backlinks
+            };
+            var cap = kind == MemoryWikiRelationKind.Backlink
+                ? MemoryWikiLimits.MaximumBacklinksPerPage
+                : kind == MemoryWikiRelationKind.Child
+                    ? MemoryWikiLimits.MaximumChildrenPerDocument
+                    : MemoryWikiLimits.MaximumRelatedPerDocument;
+            if (!buckets.TryGetValue(source, out var bucket))
+            {
+                bucket = new(cap);
+                buckets.Add(source, bucket);
+            }
+            bucket.Add(target, kind, label, sharedEntityCount);
+        }
+
+        public IEnumerable<PersistedReaderWikiRelationRow> Rows()
+        {
+            foreach (var source in _children.Keys.Concat(_related.Keys).Concat(_backlinks.Keys).Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal))
+            {
+                if (_children.TryGetValue(source, out var children))
+                    foreach (var relation in children.Values)
+                        yield return WikiRelation(generation, source, relation.Target, relation.Kind, relation.Label, relation.SharedEntityCount);
+                if (_related.TryGetValue(source, out var related))
+                    foreach (var relation in related.Values)
+                        yield return WikiRelation(generation, source, relation.Target, relation.Kind, relation.Label, relation.SharedEntityCount);
+                if (_backlinks.TryGetValue(source, out var backlinks))
+                    foreach (var relation in backlinks.Values)
+                        yield return WikiRelation(generation, source, relation.Target, relation.Kind, relation.Label, relation.SharedEntityCount);
+            }
+        }
+
+        private sealed class RelationBucket(int cap)
+        {
+            private readonly SortedDictionary<string, Candidate> _relations = new(StringComparer.Ordinal);
+
+            public IEnumerable<Candidate> Values => _relations.Values;
+
+            public void Add(string target, MemoryWikiRelationKind kind, string label, int sharedEntityCount)
+            {
+                // Each relation kind has its own target budget; labels arbitrate repeated explicit links.
+                var key = target;
+                if (_relations.TryGetValue(key, out var existing))
+                {
+                    if (string.CompareOrdinal(label, existing.Label) < 0)
+                        _relations[key] = existing with { Label = label, SharedEntityCount = sharedEntityCount };
+                    return;
+                }
+
+                if (_relations.Count == cap && string.CompareOrdinal(key, _relations.Last().Key) >= 0) return;
+                if (_relations.Count == cap) _relations.Remove(_relations.Last().Key);
+                _relations.Add(key, new(target, kind, label, sharedEntityCount));
+            }
+        }
+
+        private sealed record Candidate(string Target, MemoryWikiRelationKind Kind, string Label, int SharedEntityCount);
+    }
+
+    private async Task<PersistedReaderWikiDocumentRow?> ReadWikiDocumentBySlugCoreAsync(string generation, string @namespace, string slug, CancellationToken cancellationToken)
+    {
+        using var table = await OpenTableAsync(ReaderWikiDocumentsTable, cancellationToken).ConfigureAwait(false);
+        var batches = await table.Query().Where($"generation_key = {Literal(generation)} AND namespace = {Literal(@namespace)} AND slug = {Literal(slug)}").Limit(2).ToArrow().ConfigureAwait(false);
+        var rows = ReadReaderWikiDocumentRows(batches).ToArray();
+        return rows.Length == 1 ? rows[0] : null;
+    }
+
+    private async Task PersistWikiDocumentsAsync(IReadOnlyCollection<PersistedReaderWikiDocumentRow> rows, CancellationToken cancellationToken)
+    {
+        if (rows.Count == 0) return;
+        using var table = await OpenTableAsync(ReaderWikiDocumentsTable, cancellationToken).ConfigureAwait(false);
+        await table.MergeInsert("document_key").WhenMatchedUpdateAll().WhenNotMatchedInsertAll().Execute(BuildReaderWikiDocumentBatch(rows)).ConfigureAwait(false);
+    }
+
+    private async Task PersistWikiRelationsAsync(IReadOnlyCollection<PersistedReaderWikiRelationRow> rows, CancellationToken cancellationToken)
+    {
+        if (rows.Count == 0) return;
+        using var table = await OpenTableAsync(ReaderWikiRelationsTable, cancellationToken).ConfigureAwait(false);
+        await table.MergeInsert("relation_key").WhenMatchedUpdateAll().WhenNotMatchedInsertAll().Execute(BuildReaderWikiRelationBatch(rows)).ConfigureAwait(false);
     }
 
     private async Task PersistCatalogBuildRunRowsAsync(

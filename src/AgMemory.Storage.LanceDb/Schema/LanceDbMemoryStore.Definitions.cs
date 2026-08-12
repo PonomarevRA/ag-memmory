@@ -39,6 +39,9 @@ public sealed partial class LanceDbMemoryStore
         yield return new LanceDbTableSchemaDefinition(ReaderCatalogGenerationsTable, CurrentStorageSchemaVersion, CreateReaderCatalogGenerationSchema());
         yield return new LanceDbTableSchemaDefinition(ReaderCatalogLeavesTable, CurrentStorageSchemaVersion, CreateReaderCatalogLeafSchema());
         yield return new LanceDbTableSchemaDefinition(ReaderCatalogBuildRunsTable, CurrentStorageSchemaVersion, CreateReaderCatalogBuildRunSchema());
+        yield return new LanceDbTableSchemaDefinition(ReaderWikiMetadataTable, CurrentStorageSchemaVersion, CreateReaderWikiMetadataSchema());
+        yield return new LanceDbTableSchemaDefinition(ReaderWikiDocumentsTable, CurrentStorageSchemaVersion, CreateReaderWikiDocumentsSchema());
+        yield return new LanceDbTableSchemaDefinition(ReaderWikiRelationsTable, CurrentStorageSchemaVersion, CreateReaderWikiRelationsSchema());
     }
 
     private static LanceDbTableSchemaDefinition VectorTableDefinition(EmbeddingReference embedding)
@@ -75,6 +78,12 @@ public sealed partial class LanceDbMemoryStore
             return new LanceDbTableSchemaDefinition(ReaderCatalogLeavesTable, CurrentStorageSchemaVersion, CreateReaderCatalogLeafSchema());
         if (string.Equals(entry.TableName, ReaderCatalogBuildRunsTable, StringComparison.Ordinal))
             return new LanceDbTableSchemaDefinition(ReaderCatalogBuildRunsTable, CurrentStorageSchemaVersion, CreateReaderCatalogBuildRunSchema());
+        if (string.Equals(entry.TableName, ReaderWikiMetadataTable, StringComparison.Ordinal))
+            return new LanceDbTableSchemaDefinition(ReaderWikiMetadataTable, CurrentStorageSchemaVersion, CreateReaderWikiMetadataSchema());
+        if (string.Equals(entry.TableName, ReaderWikiDocumentsTable, StringComparison.Ordinal))
+            return new LanceDbTableSchemaDefinition(ReaderWikiDocumentsTable, CurrentStorageSchemaVersion, CreateReaderWikiDocumentsSchema());
+        if (string.Equals(entry.TableName, ReaderWikiRelationsTable, StringComparison.Ordinal))
+            return new LanceDbTableSchemaDefinition(ReaderWikiRelationsTable, CurrentStorageSchemaVersion, CreateReaderWikiRelationsSchema());
 
         if (entry.Embedding is null || !entry.TableName.StartsWith("memory_vectors_", StringComparison.Ordinal))
         {
@@ -191,6 +200,37 @@ public sealed partial class LanceDbMemoryStore
         .Field(new Field("record_type", StringType.Default, nullable: false))
         .Field(new Field("updated_at_utc", StringType.Default, nullable: false))
         .Field(new Field("version", StringType.Default, nullable: false))
+        .Build();
+
+    private static Schema CreateReaderWikiMetadataSchema() => new Schema.Builder()
+        .Field(new Field("metadata_key", StringType.Default, nullable: false))
+        .Field(new Field("scope_key", StringType.Default, nullable: false))
+        .Field(new Field("memory_id", StringType.Default, nullable: false))
+        .Field(new Field("record_version", StringType.Default, nullable: false))
+        .Field(new Field("title", StringType.Default, nullable: true))
+        .Field(new Field("namespace", StringType.Default, nullable: true))
+        .Field(new Field("slug", StringType.Default, nullable: true))
+        .Field(new Field("tags_json", StringType.Default, nullable: false))
+        .Build();
+
+    private static Schema CreateReaderWikiDocumentsSchema() => new Schema.Builder()
+        .Field(new Field("document_key", StringType.Default, nullable: false))
+        .Field(new Field("generation_key", StringType.Default, nullable: false))
+        .Field(new Field("memory_id", StringType.Default, nullable: false))
+        .Field(new Field("record_version", StringType.Default, nullable: false))
+        .Field(new Field("title", StringType.Default, nullable: false))
+        .Field(new Field("namespace", StringType.Default, nullable: false))
+        .Field(new Field("slug", StringType.Default, nullable: true))
+        .Build();
+
+    private static Schema CreateReaderWikiRelationsSchema() => new Schema.Builder()
+        .Field(new Field("relation_key", StringType.Default, nullable: false))
+        .Field(new Field("generation_key", StringType.Default, nullable: false))
+        .Field(new Field("source_memory_id", StringType.Default, nullable: false))
+        .Field(new Field("target_memory_id", StringType.Default, nullable: false))
+        .Field(new Field("kind", StringType.Default, nullable: false))
+        .Field(new Field("label", StringType.Default, nullable: false))
+        .Field(new Field("shared_entity_count", StringType.Default, nullable: false))
         .Build();
 
     private static bool IsNullableMemoryColumn(string column) => column is

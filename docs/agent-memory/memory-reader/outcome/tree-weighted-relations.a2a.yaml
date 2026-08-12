@@ -1,0 +1,22 @@
+schema: agent-memory-object/v1
+id: memory-reader.outcome.tree-weighted-relations
+kind: outcome
+area: memory-reader
+status: completed
+title: Delivered tree wiki and weighted explicit relationships
+summary: Explicit child pages and cross-links expose bounded structural-match counts without revealing entities.
+recorded: "2026-08-12"
+updated: "2026-08-12"
+tags: [memory-reader, wiki, tree, relations, privacy]
+sources:
+  - kind: code
+    ref: src/AgMemory.Storage.LanceDb/Catalog/LanceDbMemoryStore.ReaderCatalog.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryReader/MemoryReaderPage.razor
+  - kind: test
+    ref: tests/AgMemory.Storage.LanceDb.Tests/LanceDbCatalogTraversalProofTests.cs
+payload:
+  change: Added explicit Child tree links, symmetric Related links, inverse Backlinks, and numeric structural-match counts for explicit relationships.
+  measurement: Contracts 21, Core 57, Storage 19, Web 55, and the Release solution build passed.
+  result: Reader navigation remains exact-scope, generation-bound, opaque, and does not infer or disclose entities.
+  next_action: Curate exact-version metadata and explicit links for existing inbox records before expecting a populated tree.

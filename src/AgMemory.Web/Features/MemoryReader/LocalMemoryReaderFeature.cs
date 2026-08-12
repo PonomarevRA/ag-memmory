@@ -10,7 +10,7 @@ namespace AgMemory.Web.Features.MemoryReader;
 public sealed class LocalMemoryReaderFeature : IAsyncDisposable
 {
     private static readonly ContractVersion ContractVersion = new("memory-reader-v1");
-    private const string NavigationSchemaVersion = "memory-reader-navigation-v1";
+    private const string NavigationSchemaVersion = "memory-reader-navigation-v2";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly MemoryReaderHostConfiguration? _configuration;
     private readonly IDataProtector _navigationProtector;
@@ -38,11 +38,14 @@ public sealed class LocalMemoryReaderFeature : IAsyncDisposable
             configuration.Actor, configuration.Scope, configuration.HomeMemoryId.Value, ContractVersion), cancellationToken);
     }
 
-    public Task<MemoryReaderCatalogPage> BrowseAsync(MemoryReaderCatalogCursor? cursor, CancellationToken cancellationToken)
+    public Task<MemoryReaderCatalogPage> BrowseAsync(
+        MemoryReaderCatalogCursor? cursor,
+        MemoryReaderCatalogFilter filter,
+        CancellationToken cancellationToken)
     {
         var configuration = _configuration ?? throw new InvalidOperationException("The local memory reader is unavailable.");
         return GetOrCreateCatalogQuery(configuration).BrowseAsync(new(
-            configuration.Actor, configuration.Scope, cursor, ContractVersion), cancellationToken);
+            configuration.Actor, configuration.Scope, cursor, filter, ContractVersion), cancellationToken);
     }
 
     public Task<MemoryReaderDocumentPage> ReadDocumentAsync(
@@ -56,26 +59,76 @@ public sealed class LocalMemoryReaderFeature : IAsyncDisposable
             configuration.Actor, configuration.Scope, routeKey, requestedBlockKey, cursor, ContractVersion), cancellationToken);
     }
 
+    public async Task<MemoryReaderWikiSnapshot?> ReadDocumentWikiSnapshotAsync(
+        string routeKey,
+        long recordVersion,
+        CancellationToken cancellationToken)
+    {
+        var configuration = _configuration ?? throw new InvalidOperationException("The local memory reader is unavailable.");
+        if (string.IsNullOrWhiteSpace(routeKey) || routeKey.Length > 128 || recordVersion <= 0) return null;
+        LanceDbMemoryStore store;
+        lock (_sync)
+        {
+            _store ??= new LanceDbMemoryStore(new(configuration.StoragePath));
+            store = _store;
+        }
+        var eligibility = new MemorySearchEligibility(new AuthorizedScopeSet([new ScopeSelector(configuration.Scope)]), null, DateTimeOffset.UtcNow);
+        var snapshot = await store.ReadWikiDocumentSnapshotAsync(eligibility, routeKey, recordVersion, cancellationToken).ConfigureAwait(false);
+        if (snapshot is null) return null;
+        return new(snapshot.Value.Metadata,
+            await ToRelationsAsync(snapshot.Value.Children, store, cancellationToken).ConfigureAwait(false),
+            await ToRelationsAsync(snapshot.Value.Related, store, cancellationToken).ConfigureAwait(false),
+            await ToRelationsAsync(snapshot.Value.Backlinks, store, cancellationToken).ConfigureAwait(false));
+    }
+
+    public sealed record MemoryReaderWikiRelation(string Href, string Label, string Title, string Namespace, int SharedEntityCount);
+    public sealed record MemoryReaderWikiSnapshot(MemoryWikiMetadata? Metadata, IReadOnlyList<MemoryReaderWikiRelation> Children,
+        IReadOnlyList<MemoryReaderWikiRelation> Related, IReadOnlyList<MemoryReaderWikiRelation> Backlinks);
+
+    private static async Task<IReadOnlyList<MemoryReaderWikiRelation>> ToRelationsAsync(
+        IReadOnlyList<MemoryWikiRelationRecord> relations,
+        LanceDbMemoryStore store,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<MemoryReaderWikiRelation>(relations.Count);
+        foreach (var relation in relations)
+        {
+            var route = await store.GetOrCreateRouteAsync(relation.TargetMemoryId, cancellationToken).ConfigureAwait(false);
+            result.Add(new($"/memory-reader/{Uri.EscapeDataString(route.RouteKey)}", relation.Label, relation.Title, relation.Namespace, relation.SharedEntityCount));
+        }
+        return result;
+    }
+
     public string ProtectBlock(string routeKey, string blockKey) => Protect(new(NavigationSchemaVersion, "block", routeKey, blockKey, null, null));
 
     public string? ProtectContinuation(string routeKey, MemoryReaderBlockCursor? cursor) => cursor is null
         ? null
         : Protect(new(NavigationSchemaVersion, "cursor", routeKey, null, cursor.Version, cursor.NextBlockIndex));
 
-    public string? ProtectCatalogContinuation(MemoryReaderCatalogCursor? cursor) => cursor is null
+    public string? ProtectCatalogContinuation(MemoryReaderCatalogCursor? cursor, MemoryReaderCatalogFilter filter) => cursor is null
         ? null
-        : Protect(new(NavigationSchemaVersion, "catalog", null, null, null, null, cursor.GenerationKey, cursor.NextLeafPosition));
+        : Protect(new(NavigationSchemaVersion, "catalog", null, null, null, null, cursor.GenerationKey, cursor.NextLeafPosition,
+            filter.Namespace, filter.Tag));
 
-    public bool TryUnprotectCatalogContinuation(string token, out MemoryReaderCatalogCursor? cursor)
+    public bool TryUnprotectCatalogContinuation(
+        string token,
+        string? @namespace,
+        string? tag,
+        out MemoryReaderCatalogCursor? cursor,
+        out MemoryReaderCatalogFilter filter)
     {
         cursor = null;
-        if (string.IsNullOrWhiteSpace(token)) return false;
+        filter = MemoryReaderCatalogFilter.Empty;
+        if (string.IsNullOrWhiteSpace(token) || !MemoryReaderCatalogQueryService.TryNormalizeFilter(@namespace, tag, out var supplied)) return false;
         try
         {
             var payload = JsonSerializer.Deserialize<ReaderNavigationToken>(_navigationProtector.Unprotect(token), JsonOptions);
             if (payload is null || !string.Equals(payload.SchemaVersion, NavigationSchemaVersion, StringComparison.Ordinal) ||
-                payload.Kind != "catalog" || string.IsNullOrWhiteSpace(payload.GenerationKey) || payload.NextLeafPosition is null || payload.NextLeafPosition < 0) return false;
+                payload.Kind != "catalog" || string.IsNullOrWhiteSpace(payload.GenerationKey) || payload.NextLeafPosition is null || payload.NextLeafPosition < 0 ||
+                !string.Equals(payload.Namespace, supplied.Namespace, StringComparison.Ordinal) ||
+                !string.Equals(payload.Tag, supplied.Tag, StringComparison.Ordinal)) return false;
             cursor = new(payload.GenerationKey, payload.NextLeafPosition.Value);
+            filter = supplied;
             return true;
         }
         catch { return false; }
@@ -140,7 +193,7 @@ public sealed class LocalMemoryReaderFeature : IAsyncDisposable
             if (_catalogQuery is not null) return _catalogQuery;
             _store ??= new LanceDbMemoryStore(new(configuration.StoragePath));
             _catalogQuery = new MemoryReaderCatalogQueryService(_store, _store,
-                new ExactLocalReaderAuthorization(configuration), new SystemClock(), ContractVersion);
+                new ExactLocalReaderAuthorization(configuration), new SystemClock(), ContractVersion, _store);
             return _catalogQuery;
         }
     }
@@ -170,5 +223,7 @@ public sealed class LocalMemoryReaderFeature : IAsyncDisposable
         long? Version,
         int? NextBlockIndex,
         string? GenerationKey = null,
-        int? NextLeafPosition = null);
+        int? NextLeafPosition = null,
+        string? Namespace = null,
+        string? Tag = null);
 }

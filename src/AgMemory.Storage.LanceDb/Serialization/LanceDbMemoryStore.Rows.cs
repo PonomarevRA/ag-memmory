@@ -307,7 +307,8 @@ public sealed partial class LanceDbMemoryStore
         ParseUtc(Required(batch, "created_at_utc", index)),
         ParseUtc(Required(batch, "updated_at_utc", index)),
         long.Parse(Required(batch, "version", index), CultureInfo.InvariantCulture),
-        Value(batch, "expires_at_utc", index) is { } expires ? ParseUtc(expires) : null);
+        Value(batch, "expires_at_utc", index) is { } expires ? ParseUtc(expires) : null,
+        Deserialize<string[]>(Required(batch, "entities_json", index)));
 
     private static IEnumerable<MemoryReaderSourceRecord> ReadMemoryReaderSourceRecords(RecordBatch batch)
     {
@@ -370,6 +371,44 @@ public sealed partial class LanceDbMemoryStore
             Required(batch, "row_key", index), Required(batch, "generation_key", index), Required(batch, "run_key", index),
             Required(batch, "row_position", index), Required(batch, "sort_key", index), Required(batch, "memory_id", index),
             Required(batch, "record_type", index), Required(batch, "updated_at_utc", index), Required(batch, "version", index));
+    }
+
+    private sealed record PersistedReaderWikiMetadataRow(
+        string MetadataKey,
+        string ScopeKey,
+        string MemoryId,
+        string RecordVersion,
+        string? Title,
+        string? Namespace,
+        string? Slug,
+        string TagsJson)
+    {
+        public static PersistedReaderWikiMetadataRow From(MemoryWikiMetadata metadata) => new(
+            WikiMetadataKey(metadata.Scope, metadata.MemoryId, metadata.RecordVersion), LanceDbMemoryStore.ScopeKey(metadata.Scope), metadata.MemoryId.Value,
+            metadata.RecordVersion.ToString(CultureInfo.InvariantCulture), metadata.Title, metadata.Namespace, metadata.Slug,
+            JsonSerializer.Serialize(metadata.Tags, JsonOptions));
+
+        public static PersistedReaderWikiMetadataRow Read(RecordBatch batch, int index) => new(
+            Required(batch, "metadata_key", index), Required(batch, "scope_key", index), Required(batch, "memory_id", index),
+            Required(batch, "record_version", index), Value(batch, "title", index), Value(batch, "namespace", index),
+            Value(batch, "slug", index), Required(batch, "tags_json", index));
+
+        public MemoryWikiMetadata ToModel(MemoryScope scope) => new(scope, new MemoryId(MemoryId),
+            long.Parse(RecordVersion, CultureInfo.InvariantCulture), Title, Namespace, Slug, Deserialize<string[]>(TagsJson));
+    }
+
+    private sealed record PersistedReaderWikiDocumentRow(string DocumentKey, string GenerationKey, string MemoryId, string RecordVersion, string Title, string Namespace, string? Slug)
+    {
+        public static PersistedReaderWikiDocumentRow Read(RecordBatch batch, int index) => new(
+            Required(batch, "document_key", index), Required(batch, "generation_key", index), Required(batch, "memory_id", index),
+            Required(batch, "record_version", index), Required(batch, "title", index), Required(batch, "namespace", index), Value(batch, "slug", index));
+    }
+
+    private sealed record PersistedReaderWikiRelationRow(string RelationKey, string GenerationKey, string SourceMemoryId, string TargetMemoryId, string Kind, string Label, string SharedEntityCount)
+    {
+        public static PersistedReaderWikiRelationRow Read(RecordBatch batch, int index) => new(
+            Required(batch, "relation_key", index), Required(batch, "generation_key", index), Required(batch, "source_memory_id", index),
+            Required(batch, "target_memory_id", index), Required(batch, "kind", index), Required(batch, "label", index), Required(batch, "shared_entity_count", index));
     }
 
     private static float[]? TryReadVector(RecordBatch batch, int index)

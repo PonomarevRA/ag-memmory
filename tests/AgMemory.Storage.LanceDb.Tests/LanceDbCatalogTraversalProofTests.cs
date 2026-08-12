@@ -23,7 +23,7 @@ public sealed class LanceDbCatalogTraversalProofTests
     private static readonly string[] CatalogColumns =
     [
         "id", "tenant_id", "project_id", "workspace_id", "chat_id", "run_id", "record_type", "status",
-        "canonical_text", "created_at_utc", "updated_at_utc", "version", "expires_at_utc"
+        "canonical_text", "created_at_utc", "updated_at_utc", "version", "expires_at_utc", "entities_json"
     ];
 
     [Fact]
@@ -176,6 +176,60 @@ public sealed class LanceDbCatalogTraversalProofTests
             await connection.Connect(path);
             using var staging = await connection.OpenTable(ReaderCatalogBuildRunsTable);
             Assert.Equal(0, await staging.CountRows());
+        }
+        finally
+        {
+            if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReaderCatalog_WikiRelations_AreSemanticDeduplicatedStableAndBoundedAcrossSourcePortions()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agmemory-reader-wiki-relations-{Guid.NewGuid():N}");
+        try
+        {
+            var targets = Enumerable.Range(0, 130).Select(index => Record($"target-{index:D3}", ScopeA, $"target {index:D3}")).ToArray();
+            var outlinks = string.Join(' ', Enumerable.Range(0, 65)
+                .Select(index => $"[[doc:docs/t-{index:D3}|target {index:D3}]]"));
+            var related = string.Join(' ', Enumerable.Range(65, 65)
+                .Select(index => $"[[related:docs/t-{index:D3}|target {index:D3}]]"));
+            var main = Record("a-source-main", ScopeA,
+                string.Concat(outlinks, ' ', related, " [[doc:docs/t-000|z label]] [[doc:docs/t-000|a label]] [[related:docs/t-000|related duplicate]]"));
+            var backlinkSources = Enumerable.Range(0, 51)
+                .Select(index => Record($"back-source-{index:D3}", ScopeA, "[[doc:docs/t-000|backlink]]"))
+                .ToArray();
+            var eligibility = new MemorySearchEligibility(new(new[] { new ScopeSelector(ScopeA) }), null, Now.AddHours(1));
+
+            await using var store = new LanceDbMemoryStore(new(path));
+            await WriteAsync(store, Authorized(ScopeA), [.. targets, main, .. backlinkSources]);
+            foreach (var target in targets)
+                await store.UpsertWikiMetadataAsync(new(ScopeA, target.Id, 1, target.Id.Value, "docs", $"t-{target.Id.Value[^3..]}", []), default);
+
+            var generation = await store.ReadReadyLeafPageAsync(eligibility, null, default);
+            Assert.NotNull(generation);
+            var mainChildren = await store.ReadWikiRelationsAsync(eligibility, generation!.GenerationKey, main.Id,
+                MemoryWikiRelationKind.Child, default);
+            var mainRelated = await store.ReadWikiRelationsAsync(eligibility, generation.GenerationKey, main.Id,
+                MemoryWikiRelationKind.Related, default);
+            var inverseRelated = await store.ReadWikiRelationsAsync(eligibility, generation.GenerationKey, targets[65].Id,
+                MemoryWikiRelationKind.Related, default);
+            var backlinks = await store.ReadWikiRelationsAsync(eligibility, generation.GenerationKey, targets[0].Id,
+                MemoryWikiRelationKind.Backlink, default);
+
+            Assert.Equal(MemoryWikiLimits.MaximumChildrenPerDocument, mainChildren.Count);
+            Assert.Equal(MemoryWikiLimits.MaximumRelatedPerDocument, mainRelated.Count);
+            Assert.Equal(mainChildren.Select(link => link.TargetMemoryId.Value).OrderBy(value => value, StringComparer.Ordinal),
+                mainChildren.Select(link => link.TargetMemoryId.Value));
+            Assert.Equal(mainRelated.Select(link => link.TargetMemoryId.Value).OrderBy(value => value, StringComparer.Ordinal),
+                mainRelated.Select(link => link.TargetMemoryId.Value));
+            Assert.Equal("a label", Assert.Single(mainChildren, link => link.TargetMemoryId == targets[0].Id).Label);
+            Assert.Equal("related duplicate", Assert.Single(mainRelated, link => link.TargetMemoryId == targets[0].Id).Label);
+            Assert.Equal("target 065", Assert.Single(inverseRelated, link => link.TargetMemoryId == main.Id).Label);
+            Assert.Equal(MemoryWikiLimits.MaximumBacklinksPerPage, backlinks.Count);
+            Assert.Equal(backlinks.Select(link => link.TargetMemoryId.Value).OrderBy(value => value, StringComparer.Ordinal),
+                backlinks.Select(link => link.TargetMemoryId.Value));
+            Assert.Contains(backlinks, link => link.TargetMemoryId == main.Id);
         }
         finally
         {

@@ -215,7 +215,7 @@ public sealed class MemoryReaderQueryServiceTests
     }
 
     private static MemoryReaderSourceRecord Record(string id, MemoryScope scope, string text) => new(
-        new(id), scope, MemoryRecordType.Fact, MemoryLifecycleStatus.Active, text, Now, Now, 1, null);
+        new(id), scope, MemoryRecordType.Fact, MemoryLifecycleStatus.Active, text, Now, Now, 1, null, []);
 
     private static string Blocks(int count, string? firstBody = null) => string.Join('\n', Enumerable.Range(1, count)
         .Select(index => $"# Part {index} ^part-{index}\n{(index == 1 ? firstBody ?? $"Body {index}" : $"Body {index}")}"));

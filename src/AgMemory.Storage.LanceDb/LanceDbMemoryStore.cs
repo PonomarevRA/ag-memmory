@@ -13,7 +13,7 @@ namespace AgMemory.Storage.LanceDb;
 /// Local LanceDB implementation of the provider-neutral durable-memory and search ports.
 /// LanceDB, Arrow schemas and SQL-like predicates are deliberately implementation details.
 /// </summary>
-public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSource, IMemoryReaderSource, IMemoryReaderCatalogSource, IVectorSearch, ILexicalSearch, IAsyncDisposable
+public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSource, IMemoryReaderSource, IMemoryReaderCatalogSource, IMemoryWikiMetadataStore, IMemoryReaderWikiRelationSource, IVectorSearch, ILexicalSearch, IAsyncDisposable
 {
     /// <summary>The initial, fail-closed schema policy for tables owned by this adapter.</summary>
     public const string CurrentStorageSchemaVersion = "1.0";
@@ -26,6 +26,9 @@ public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSourc
     private const string ReaderCatalogGenerationsTable = "memory_reader_catalog_generations";
     private const string ReaderCatalogLeavesTable = "memory_reader_catalog_leaves";
     private const string ReaderCatalogBuildRunsTable = "memory_reader_catalog_build_runs";
+    private const string ReaderWikiMetadataTable = "memory_reader_wiki_metadata";
+    private const string ReaderWikiDocumentsTable = "memory_reader_wiki_documents";
+    private const string ReaderWikiRelationsTable = "memory_reader_wiki_relations";
     private const string SchemaManifestTable = "agmemory_schema_manifest";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] MemoryColumnNames =
@@ -43,7 +46,7 @@ public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSourc
     private static readonly string[] ReaderSourceColumnNames =
     [
         "id", "tenant_id", "project_id", "workspace_id", "chat_id", "run_id", "record_type", "status",
-        "canonical_text", "created_at_utc", "updated_at_utc", "version", "expires_at_utc"
+        "canonical_text", "created_at_utc", "updated_at_utc", "version", "expires_at_utc", "entities_json"
     ];
     private static readonly string[] ReaderCatalogGenerationColumnNames =
     [

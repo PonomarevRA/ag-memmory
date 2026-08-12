@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgMemory.Contracts;
+using AgMemory.Core;
 
 namespace AgMemory.Web.Features.MemoryReader;
 
@@ -37,6 +38,8 @@ public static class MemoryReaderEndpoint
     public static async Task<IResult> HandleCatalogAsync(
         HttpContext context,
         string? continuation,
+        string? @namespace,
+        string? tag,
         IHostEnvironment environment,
         LocalMemoryReaderFeature feature,
         CancellationToken cancellationToken)
@@ -45,12 +48,20 @@ public static class MemoryReaderEndpoint
         if (!MemoryReaderAccessPolicy.AllowsStoreAccess(feature.IsConfigured, environment.IsDevelopment(), context.Connection.RemoteIpAddress))
             return CatalogJson(MemoryReaderCatalogApiResponse.Unavailable);
         MemoryReaderCatalogCursor? cursor = null;
-        if (!string.IsNullOrWhiteSpace(continuation) && !feature.TryUnprotectCatalogContinuation(continuation, out cursor))
+        MemoryReaderCatalogFilter filter;
+        if (!string.IsNullOrWhiteSpace(continuation))
+        {
+            if (!feature.TryUnprotectCatalogContinuation(continuation, @namespace, tag, out cursor, out filter))
+                return CatalogJson(MemoryReaderCatalogApiResponse.Stale);
+        }
+        else if (!MemoryReaderCatalogQueryService.TryNormalizeFilter(@namespace, tag, out filter))
+        {
             return CatalogJson(MemoryReaderCatalogApiResponse.Stale);
+        }
         try
         {
-            var page = await feature.BrowseAsync(cursor, cancellationToken).ConfigureAwait(false);
-            return CatalogJson(ToCatalogApiResponse(page, feature));
+            var page = await feature.BrowseAsync(cursor, filter, cancellationToken).ConfigureAwait(false);
+            return CatalogJson(ToCatalogApiResponse(page, feature, filter));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch { return CatalogJson(MemoryReaderCatalogApiResponse.Unavailable); }
@@ -78,7 +89,12 @@ public static class MemoryReaderEndpoint
         try
         {
             var page = await feature.ReadDocumentAsync(routeKey, blockKey, cursor, cancellationToken).ConfigureAwait(false);
-            return Json(ToApiResponse(page, feature));
+            if (page.State != MemoryReaderDocumentState.Available)
+                return Json(ToApiResponse(page, feature));
+            var snapshot = await feature.ReadDocumentWikiSnapshotAsync(routeKey, page.RecordVersion ?? 0, cancellationToken).ConfigureAwait(false);
+            return snapshot is null
+                ? Json(MemoryReaderApiResponse.Changed)
+                : Json(ToApiResponse(page, feature, snapshot.Metadata, snapshot.Children, snapshot.Related, snapshot.Backlinks));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -93,11 +109,21 @@ public static class MemoryReaderEndpoint
     private static IResult Json(MemoryReaderApiResponse response) => new MemoryReaderJsonResult(response);
     private static IResult CatalogJson(MemoryReaderCatalogApiResponse response) => new MemoryReaderCatalogJsonResult(response);
 
-    private static MemoryReaderApiResponse ToApiResponse(MemoryReaderDocumentPage page, LocalMemoryReaderFeature feature) => page.State switch
+    private static MemoryReaderApiResponse ToApiResponse(
+        MemoryReaderDocumentPage page,
+        LocalMemoryReaderFeature feature,
+        MemoryWikiMetadata? metadata = null,
+        IReadOnlyList<LocalMemoryReaderFeature.MemoryReaderWikiRelation>? children = null,
+        IReadOnlyList<LocalMemoryReaderFeature.MemoryReaderWikiRelation>? related = null,
+        IReadOnlyList<LocalMemoryReaderFeature.MemoryReaderWikiRelation>? backlinks = null) => page.State switch
     {
         MemoryReaderDocumentState.Available => new(
             "available",
             page.RouteKey,
+            metadata?.Title ?? page.Blocks.FirstOrDefault(block => !string.IsNullOrWhiteSpace(block.Heading))?.Heading ?? "Запись памяти",
+            metadata?.Namespace ?? "inbox",
+            metadata?.Tags ?? [],
+            ToRelationDtos(children), ToRelationDtos(related), ToRelationDtos(backlinks),
             page.Blocks.Select(block => new MemoryReaderBlockDto(
                 feature.ProtectBlock(page.RouteKey, block.BlockKey),
                 block.Heading,
@@ -111,10 +137,20 @@ public static class MemoryReaderEndpoint
         _ => MemoryReaderApiResponse.Unavailable
     };
 
-    private static MemoryReaderCatalogApiResponse ToCatalogApiResponse(MemoryReaderCatalogPage page, LocalMemoryReaderFeature feature) => page.State switch
+    private static IReadOnlyList<MemoryReaderRelationDto> ToRelationDtos(IReadOnlyList<LocalMemoryReaderFeature.MemoryReaderWikiRelation>? relations) =>
+        (relations ?? []).Select(relation => new MemoryReaderRelationDto(relation.Href, relation.Label, relation.Title, relation.Namespace, relation.SharedEntityCount)).ToArray();
+
+    private static MemoryReaderCatalogApiResponse ToCatalogApiResponse(
+        MemoryReaderCatalogPage page,
+        LocalMemoryReaderFeature feature,
+        MemoryReaderCatalogFilter filter) => page.State switch
     {
         MemoryReaderCatalogState.Available => new("available", page.Documents.Select(document => new MemoryReaderCatalogDocumentDto(
-            document.RecordHref, document.Type.ToString(), document.Preview, document.UpdatedAt)).ToArray(), feature.ProtectCatalogContinuation(page.NextCursor)),
+            document.RecordHref, document.Type.ToString(), document.Title, document.Namespace, document.Tags,
+            document.Preview, document.UpdatedAt)).ToArray(),
+            page.Namespaces.Select(facet => new MemoryReaderCatalogFacetDto(facet.Locator, facet.Label, facet.Count)).ToArray(),
+            page.Tags.Select(facet => new MemoryReaderCatalogFacetDto(facet.Locator, facet.Label, facet.Count)).ToArray(),
+            feature.ProtectCatalogContinuation(page.NextCursor, filter)),
         MemoryReaderCatalogState.NotFound => MemoryReaderCatalogApiResponse.NotFound,
         MemoryReaderCatalogState.Changed => MemoryReaderCatalogApiResponse.Changed,
         MemoryReaderCatalogState.Stale => MemoryReaderCatalogApiResponse.Stale,
@@ -127,31 +163,48 @@ public static class MemoryReaderEndpoint
 public sealed record MemoryReaderApiResponse(
     string Status,
     string? RouteKey,
+    string? Title,
+    string? Namespace,
+    IReadOnlyList<string> Tags,
+    IReadOnlyList<MemoryReaderRelationDto> Children,
+    IReadOnlyList<MemoryReaderRelationDto> Related,
+    IReadOnlyList<MemoryReaderRelationDto> Backlinks,
     IReadOnlyList<MemoryReaderBlockDto> Blocks,
     string? NextBlockToken)
 {
-    public static MemoryReaderApiResponse Unavailable { get; } = new("unavailable", null, [], null);
-    public static MemoryReaderApiResponse NotFound { get; } = new("not-found", null, [], null);
-    public static MemoryReaderApiResponse Changed { get; } = new("changed", null, [], null);
-    public static MemoryReaderApiResponse Stale { get; } = new("stale", null, [], null);
+    public static MemoryReaderApiResponse Unavailable { get; } = new("unavailable", null, null, null, [], [], [], [], [], null);
+    public static MemoryReaderApiResponse NotFound { get; } = new("not-found", null, null, null, [], [], [], [], [], null);
+    public static MemoryReaderApiResponse Changed { get; } = new("changed", null, null, null, [], [], [], [], [], null);
+    public static MemoryReaderApiResponse Stale { get; } = new("stale", null, null, null, [], [], [], [], [], null);
 }
 
 public sealed record MemoryReaderBlockDto(string Id, string? Heading, IReadOnlyList<MemoryReaderInlineDto> Content);
 public sealed record MemoryReaderInlineDto(string Kind, string Text, string? RouteKey, string? BlockToken);
+public sealed record MemoryReaderRelationDto(string Href, string Label, string Title, string Namespace, int SharedEntityCount);
 
 public sealed record MemoryReaderCatalogApiResponse(
     string Status,
     IReadOnlyList<MemoryReaderCatalogDocumentDto> Documents,
+    IReadOnlyList<MemoryReaderCatalogFacetDto> Namespaces,
+    IReadOnlyList<MemoryReaderCatalogFacetDto> Tags,
     string? NextToken)
 {
-    public static MemoryReaderCatalogApiResponse Unavailable { get; } = new("unavailable", [], null);
-    public static MemoryReaderCatalogApiResponse NotFound { get; } = new("not-found", [], null);
-    public static MemoryReaderCatalogApiResponse Changed { get; } = new("changed", [], null);
-    public static MemoryReaderCatalogApiResponse Stale { get; } = new("stale", [], null);
-    public static MemoryReaderCatalogApiResponse NotReady { get; } = new("catalog-not-ready", [], null);
+    public static MemoryReaderCatalogApiResponse Unavailable { get; } = new("unavailable", [], [], [], null);
+    public static MemoryReaderCatalogApiResponse NotFound { get; } = new("not-found", [], [], [], null);
+    public static MemoryReaderCatalogApiResponse Changed { get; } = new("changed", [], [], [], null);
+    public static MemoryReaderCatalogApiResponse Stale { get; } = new("stale", [], [], [], null);
+    public static MemoryReaderCatalogApiResponse NotReady { get; } = new("catalog-not-ready", [], [], [], null);
 }
 
-public sealed record MemoryReaderCatalogDocumentDto(string Href, string Type, string Preview, DateTimeOffset UpdatedAt);
+public sealed record MemoryReaderCatalogDocumentDto(
+    string Href,
+    string Type,
+    string Title,
+    string Namespace,
+    IReadOnlyList<string> Tags,
+    string Preview,
+    DateTimeOffset UpdatedAt);
+public sealed record MemoryReaderCatalogFacetDto(string Locator, string Label, int Count);
 
 internal sealed class MemoryReaderJsonResult(MemoryReaderApiResponse response) : IResult
 {

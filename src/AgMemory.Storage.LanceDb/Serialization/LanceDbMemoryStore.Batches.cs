@@ -116,6 +116,29 @@ public sealed partial class LanceDbMemoryStore
         ], rows.Count);
     }
 
+    private static RecordBatch BuildReaderWikiMetadataBatch(IReadOnlyCollection<PersistedReaderWikiMetadataRow> rows)
+    {
+        return new RecordBatch(CreateReaderWikiMetadataSchema(),
+        [
+            Strings(rows.Select(row => row.MetadataKey)), Strings(rows.Select(row => row.ScopeKey)), Strings(rows.Select(row => row.MemoryId)),
+            Strings(rows.Select(row => row.RecordVersion)), Strings(rows.Select(row => row.Title)), Strings(rows.Select(row => row.Namespace)),
+            Strings(rows.Select(row => row.Slug)), Strings(rows.Select(row => row.TagsJson))
+        ], rows.Count);
+    }
+
+    private static RecordBatch BuildReaderWikiDocumentBatch(IReadOnlyCollection<PersistedReaderWikiDocumentRow> rows) => new(CreateReaderWikiDocumentsSchema(),
+    [
+        Strings(rows.Select(row => row.DocumentKey)), Strings(rows.Select(row => row.GenerationKey)), Strings(rows.Select(row => row.MemoryId)),
+        Strings(rows.Select(row => row.RecordVersion)), Strings(rows.Select(row => row.Title)), Strings(rows.Select(row => row.Namespace)), Strings(rows.Select(row => row.Slug))
+    ], rows.Count);
+
+    private static RecordBatch BuildReaderWikiRelationBatch(IReadOnlyCollection<PersistedReaderWikiRelationRow> rows) => new(CreateReaderWikiRelationsSchema(),
+    [
+        Strings(rows.Select(row => row.RelationKey)), Strings(rows.Select(row => row.GenerationKey)), Strings(rows.Select(row => row.SourceMemoryId)),
+        Strings(rows.Select(row => row.TargetMemoryId)), Strings(rows.Select(row => row.Kind)), Strings(rows.Select(row => row.Label)),
+        Strings(rows.Select(row => row.SharedEntityCount))
+    ], rows.Count);
+
     private static RecordBatch BuildSchemaManifestBatch(IReadOnlyCollection<PersistedSchemaManifestRow> entries)
     {
         if (entries.Count == 0) throw new ArgumentException("A schema manifest batch cannot be empty.", nameof(entries));

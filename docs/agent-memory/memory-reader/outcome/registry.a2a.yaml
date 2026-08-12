@@ -3,6 +3,30 @@ version: 1
 area: memory-reader
 kind: outcome
 objects:
+  - id: memory-reader.outcome.explicit-wiki-relations
+    title: Added metadata-backed catalog cards and explicit wiki relations
+    status: superseded
+    summary: Reader now uses versioned wiki metadata and same-generation doc and related relation leaves without exposing entities.
+    path: explicit-wiki-relations.a2a.yaml
+    tags: [memory-reader, wiki, metadata, relations, privacy]
+    recorded: "2026-08-11"
+    updated: "2026-08-11"
+  - id: memory-reader.outcome.tree-weighted-relations
+    title: Delivered tree wiki and weighted explicit relationships
+    status: completed
+    summary: Explicit child tree and cross-links now show bounded structural-match counts without disclosing entities.
+    path: tree-weighted-relations.a2a.yaml
+    tags: [memory-reader, wiki, tree, relations, privacy]
+    recorded: "2026-08-12"
+    updated: "2026-08-12"
+  - id: memory-reader.outcome.derived-wiki-facets
+    title: Delivered bounded derived Wiki facets for the reader
+    status: superseded
+    summary: Reader now filters the exact-scope catalogue by derived type namespace and entity tag with filter-bound opaque continuations.
+    path: derived-wiki-facets.a2a.yaml
+    tags: [memory-reader, wiki, facets, tags, pagination]
+    recorded: "2026-08-11"
+    updated: "2026-08-11"
   - id: memory-reader.outcome.local-catalog-and-paged-graph
     title: Delivered scoped catalogue reader and incremental graph
     status: completed

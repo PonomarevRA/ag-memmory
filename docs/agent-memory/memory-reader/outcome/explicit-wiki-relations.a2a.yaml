@@ -1,0 +1,23 @@
+schema: agent-memory-object/v1
+id: memory-reader.outcome.explicit-wiki-relations
+kind: outcome
+area: memory-reader
+status: superseded
+title: Added metadata-backed catalog cards and explicit wiki relations
+summary: Reader uses versioned wiki metadata and same-generation doc and related leaves without exposing raw entities.
+recorded: "2026-08-11"
+updated: "2026-08-11"
+tags: [memory-reader, wiki, metadata, relations, privacy]
+supersedes: [memory-reader.outcome.derived-wiki-facets]
+sources:
+  - kind: code
+    ref: src/AgMemory.Storage.LanceDb/Catalog/LanceDbMemoryStore.ReaderCatalog.cs
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryReader/MemoryReaderEndpoint.cs
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/MemoryReaderEndpointTests.cs
+payload:
+  change: Added exact-version metadata, inbox fallback cards, and generation-bound explicit doc and related relation leaves.
+  measurement: Contracts, Core, Storage, and Web targeted suites passed with a clean solution build.
+  result: Browser navigation exposes only safe metadata and fresh opaque target routes; raw entities are not reader tags.
+  next_action: Add explicit block-target and tag or namespace grammar handling only if the product keeps those grammar forms.

@@ -112,7 +112,7 @@ public sealed class MemoryReaderQueryService : IMemoryReaderQueryService
         var blocks = ParseBlocks(record.CanonicalText);
         if (blocks is null) return Unavailable(contractVersion);
         if (cursor is not null && cursor.Version != record.Version)
-            return new(MemoryReaderDocumentState.Changed, routeKey, [], null, contractVersion);
+            return new(MemoryReaderDocumentState.Changed, routeKey, [], null, null, contractVersion);
 
         var start = cursor?.NextBlockIndex ?? FindStart(blocks, requestedBlockKey);
         if (start < 0 || start >= blocks.Count)
@@ -130,7 +130,7 @@ public sealed class MemoryReaderQueryService : IMemoryReaderQueryService
 
         var nextIndex = start + visible.Count;
         var next = nextIndex < blocks.Count ? new MemoryReaderBlockCursor(record.Version, nextIndex) : null;
-        return new(MemoryReaderDocumentState.Available, routeKey, visible, next, contractVersion);
+        return new(MemoryReaderDocumentState.Available, routeKey, visible, next, record.Version, contractVersion);
     }
 
     private async Task<IReadOnlyList<MemoryReaderInline>> RenderInlinesAsync(
@@ -371,10 +371,10 @@ public sealed class MemoryReaderQueryService : IMemoryReaderQueryService
     }
 
     private MemoryReaderDocumentPage NotFound(string routeKey, ContractVersion contractVersion) =>
-        new(MemoryReaderDocumentState.NotFound, routeKey, [], null, contractVersion);
+        new(MemoryReaderDocumentState.NotFound, routeKey, [], null, null, contractVersion);
 
     private MemoryReaderDocumentPage Unavailable(ContractVersion? contractVersion) =>
-        new(MemoryReaderDocumentState.Unavailable, string.Empty, [], null, contractVersion ?? _supportedContractVersion);
+        new(MemoryReaderDocumentState.Unavailable, string.Empty, [], null, null, contractVersion ?? _supportedContractVersion);
 
     private sealed class ParsedBlockBuilder(string key, string? heading, bool isExplicit)
     {

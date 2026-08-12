@@ -164,6 +164,121 @@ public sealed class MemoryReaderEndpointTests
     }
 
     [Fact]
+    public async Task InvalidOrMismatchedCatalogFilter_ReturnsStaleBeforeOpeningConfiguredStorage()
+    {
+        var root = TemporaryPath();
+        var storagePath = Path.Combine(root, "reader-lancedb");
+        try
+        {
+            var provider = Provider(root);
+            await using var feature = new LocalMemoryReaderFeature(Options(new("reader-home")), root, provider);
+            var context = Context(IPAddress.Loopback);
+
+            var invalid = await ExecuteCatalogAsync(await MemoryReaderEndpoint.HandleCatalogAsync(
+                context, null, "type/Fact", null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+            Assert.Equal("stale", invalid.Status);
+            Assert.False(Directory.Exists(storagePath));
+
+            var token = feature.ProtectCatalogContinuation(new("generation", 20), new("type/fact", null));
+            context = Context(IPAddress.Loopback);
+            var mismatched = await ExecuteCatalogAsync(await MemoryReaderEndpoint.HandleCatalogAsync(
+                context, token, null, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+            Assert.Equal("stale", mismatched.Status);
+            Assert.False(Directory.Exists(storagePath));
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public async Task DevelopmentLoopbackCatalog_ProjectsSafeFacetsAndFiltersWithoutDurableIds()
+    {
+        var root = TemporaryPath();
+        var storagePath = Path.Combine(root, "reader-lancedb");
+        var fact = new MemoryId("facet-fact");
+        var outcome = new MemoryId("facet-outcome");
+        try
+        {
+            Directory.CreateDirectory(root);
+            await SeedAsync(storagePath, Record(fact, "Fact preview [[doc:engineering/outcome-title|Outcome]] [[related:engineering/outcome-title|Related outcome]]", MemoryRecordType.Fact, ["raw entity"]));
+            await SeedAsync(storagePath, Record(outcome, "Outcome preview", MemoryRecordType.Outcome, ["raw entity"]));
+            await using (var store = new LanceDbMemoryStore(new(storagePath)))
+            {
+                await store.UpsertWikiMetadataAsync(new(Scope, fact, 1, "Fact title", "engineering/core", "fact-title", ["shared tag"]), default);
+                await store.UpsertWikiMetadataAsync(new(Scope, outcome, 1, "Outcome title", "engineering", "outcome-title", ["shared tag"]), default);
+            }
+            await using var feature = new LocalMemoryReaderFeature(Options(fact), root, Provider(root));
+            var context = Context(IPAddress.Loopback);
+
+            var response = await ExecuteCatalogAsync(await MemoryReaderEndpoint.HandleCatalogAsync(
+                context, null, null, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+            var json = await ReadBodyAsync(context);
+
+            Assert.Equal("available", response.Status);
+            Assert.Equal(new[] { "engineering", "engineering/core" }, response.Namespaces.Select(facet => facet.Locator));
+            var shared = Assert.Single(response.Tags, facet => facet.Label == "shared tag");
+            Assert.Equal(2, shared.Count);
+            Assert.DoesNotContain(fact.Value, json, StringComparison.Ordinal);
+            Assert.DoesNotContain(outcome.Value, json, StringComparison.Ordinal);
+            Assert.DoesNotContain("reader-actor", json, StringComparison.Ordinal);
+            Assert.DoesNotContain(Scope.TenantId.Value, json, StringComparison.Ordinal);
+            Assert.DoesNotContain("raw entity", json, StringComparison.Ordinal);
+
+            context = Context(IPAddress.Loopback);
+            var filtered = await ExecuteCatalogAsync(await MemoryReaderEndpoint.HandleCatalogAsync(
+                context, null, "engineering/core", shared.Locator, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+            Assert.Equal("available", filtered.Status);
+            Assert.Single(filtered.Documents);
+            Assert.Equal("Fact", filtered.Documents[0].Type);
+            Assert.Equal("Fact title", filtered.Documents[0].Title);
+
+            var routeKey = filtered.Documents[0].Href.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+            context = Context(IPAddress.Loopback);
+            var document = await ExecuteAsync(await MemoryReaderEndpoint.HandleDocumentAsync(
+                context, routeKey, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+            Assert.Equal("available", document.Status);
+            Assert.Equal("Fact title", document.Title);
+            Assert.Equal("engineering/core", document.Namespace);
+            Assert.Equal(["shared tag"], document.Tags);
+            Assert.Single(document.Children);
+            Assert.Equal("Outcome", document.Children[0].Label);
+            Assert.Single(document.Related);
+            Assert.Equal("Related outcome", document.Related[0].Label);
+
+            var outcomeRouteKey = document.Children[0].Href.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+            context = Context(IPAddress.Loopback);
+            var outcomeDocument = await ExecuteAsync(await MemoryReaderEndpoint.HandleDocumentAsync(
+                context, outcomeRouteKey, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+            Assert.Single(outcomeDocument.Backlinks);
+            Assert.Equal("Outcome", outcomeDocument.Backlinks[0].Label);
+            Assert.Single(outcomeDocument.Related);
+            Assert.Equal("Related outcome", outcomeDocument.Related[0].Label);
+
+            await using (var verifier = new LanceDbMemoryStore(new(storagePath)))
+            {
+                var eligibility = new MemorySearchEligibility(new AuthorizedScopeSet([new ScopeSelector(Scope)]), null, Now.AddHours(1));
+                var generation = await verifier.ReadReadyLeafPageAsync(eligibility, null, default);
+                Assert.NotNull(generation);
+                await UpdateAsync(verifier, Record(outcome, "Outcome preview", MemoryRecordType.Outcome, ["raw entity"]) with
+                {
+                    Status = MemoryLifecycleStatus.Invalid,
+                    Version = 2,
+                    UpdatedAt = Now.AddMinutes(1)
+                }, 1);
+                var staleRelations = await verifier.ReadWikiRelationsAsync(eligibility, generation!.GenerationKey, fact,
+                    MemoryWikiRelationKind.Child, default);
+                Assert.Empty(staleRelations);
+            }
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
     public async Task ProtectedNavigation_SurvivesProviderRestartAndIsBoundToItsRoute()
     {
         var root = TemporaryPath();
@@ -193,7 +308,10 @@ public sealed class MemoryReaderEndpointTests
     {
         var properties = typeof(MemoryReaderApiResponse).GetProperties()
             .Concat(typeof(MemoryReaderBlockDto).GetProperties())
-            .Concat(typeof(MemoryReaderInlineDto).GetProperties());
+            .Concat(typeof(MemoryReaderInlineDto).GetProperties())
+            .Concat(typeof(MemoryReaderCatalogApiResponse).GetProperties())
+            .Concat(typeof(MemoryReaderCatalogDocumentDto).GetProperties())
+            .Concat(typeof(MemoryReaderCatalogFacetDto).GetProperties());
         var prohibited = new[] { "Actor", "Scope", "MemoryId", "HomeMemory", "Cursor", "Storage", "Policy", "Provenance", "Embedding" };
 
         Assert.All(properties, property =>
@@ -202,7 +320,8 @@ public sealed class MemoryReaderEndpointTests
         foreach (var handler in new[]
                  {
                      typeof(MemoryReaderEndpoint).GetMethod(nameof(MemoryReaderEndpoint.HandleHomeAsync), BindingFlags.Public | BindingFlags.Static)!,
-                     typeof(MemoryReaderEndpoint).GetMethod(nameof(MemoryReaderEndpoint.HandleDocumentAsync), BindingFlags.Public | BindingFlags.Static)!
+                     typeof(MemoryReaderEndpoint).GetMethod(nameof(MemoryReaderEndpoint.HandleDocumentAsync), BindingFlags.Public | BindingFlags.Static)!,
+                     typeof(MemoryReaderEndpoint).GetMethod(nameof(MemoryReaderEndpoint.HandleCatalogAsync), BindingFlags.Public | BindingFlags.Static)!
                  })
         {
             Assert.DoesNotContain(handler.GetParameters(), parameter =>
@@ -238,7 +357,15 @@ public sealed class MemoryReaderEndpointTests
         Assert.Contains("private async Task RestartAsync() => await LoadCatalogAsync(null, replace: true);", page, StringComparison.Ordinal);
         Assert.Contains("await LoadCatalogAsync(token, replace: false);", page, StringComparison.Ordinal);
         Assert.Contains("Documents = _catalog.Documents.Concat(page.Documents).GroupBy(document => document.Href, StringComparer.Ordinal).Select(group => group.First()).ToArray()", page, StringComparison.Ordinal);
-        Assert.Contains("export async function loadCatalog(token)", module, StringComparison.Ordinal);
+        Assert.Contains("export async function loadCatalog(token, namespaceValue, tag)", module, StringComparison.Ordinal);
+        Assert.Contains("parameters.set('namespace', namespaceValue);", module, StringComparison.Ordinal);
+        Assert.Contains("parameters.set('tag', tag);", module, StringComparison.Ordinal);
+        Assert.Contains("function isSafeNamespace(value)", module, StringComparison.Ordinal);
+        Assert.Contains("segments.length >= 1 && segments.length <= 6", module, StringComparison.Ordinal);
+        Assert.DoesNotContain("safeFacet(value, 'type/')", module, StringComparison.Ordinal);
+        Assert.Contains("aria-current=\"@FacetAriaCurrent(facet.Locator, _requestedNamespace)\"", page, StringComparison.Ordinal);
+        Assert.Contains("aria-current=\"@FacetAriaCurrent(facet.Locator, _requestedTag)\"", page, StringComparison.Ordinal);
+        Assert.Contains("? \"page\" : null", page, StringComparison.Ordinal);
         Assert.DoesNotContain("continuation:", page, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -258,9 +385,9 @@ public sealed class MemoryReaderEndpointTests
         }
     };
 
-    private static MemoryRecord Record(MemoryId id, string text) => new(
-        id, Scope, MemoryRecordType.Fact, MemoryLifecycleStatus.Active, text, null, .5, .5, 5,
-        Now, Now, 1, [], new MemoryProvenance("test", null, null, null, null, null, null, [new("evidence")]),
+    private static MemoryRecord Record(MemoryId id, string text, MemoryRecordType type = MemoryRecordType.Fact, IReadOnlyList<string>? entities = null) => new(
+        id, Scope, type, MemoryLifecycleStatus.Active, text, null, .5, .5, 5,
+        Now, Now, 1, entities ?? [], new MemoryProvenance("test", null, null, null, null, null, null, [new("evidence")]),
         null, null, $"dedup-{id.Value}");
 
     private static async Task SeedAsync(string storagePath, MemoryRecord record)
@@ -269,6 +396,14 @@ public sealed class MemoryReaderEndpointTests
         await using var transaction = await store.BeginTransactionAsync(default);
         var scopes = new AuthorizedScopeSet([new ScopeSelector(Scope)]);
         Assert.True((await transaction.WriteRecordAsync(scopes, record, 0, default)).Applied);
+        await transaction.CommitAsync(default);
+    }
+
+    private static async Task UpdateAsync(LanceDbMemoryStore store, MemoryRecord record, long expectedVersion)
+    {
+        await using var transaction = await store.BeginTransactionAsync(default);
+        var scopes = new AuthorizedScopeSet([new ScopeSelector(Scope)]);
+        Assert.True((await transaction.WriteRecordAsync(scopes, record, expectedVersion, default)).Applied);
         await transaction.CommitAsync(default);
     }
 
@@ -288,6 +423,14 @@ public sealed class MemoryReaderEndpointTests
         await result.ExecuteAsync(context);
         context.Response.Body.Position = 0;
         return (await JsonSerializer.DeserializeAsync<MemoryReaderApiResponse>(
+            context.Response.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web)))!;
+    }
+
+    private static async Task<MemoryReaderCatalogApiResponse> ExecuteCatalogAsync(IResult result, HttpContext context)
+    {
+        await result.ExecuteAsync(context);
+        context.Response.Body.Position = 0;
+        return (await JsonSerializer.DeserializeAsync<MemoryReaderCatalogApiResponse>(
             context.Response.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web)))!;
     }
 

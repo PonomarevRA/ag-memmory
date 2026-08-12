@@ -29,6 +29,7 @@ public sealed class MemoryReaderContractTests
         Assert.Equal(8_000, MemoryReaderLimits.MaximumBlockCharacters);
         Assert.Equal(120_000, MemoryReaderLimits.MaximumDocumentCharacters);
         Assert.Equal(320, MemoryReaderLimits.MaximumCatalogPreviewCharacters);
+        Assert.Equal(64, MemoryReaderLimits.MaximumCatalogTagFacets);
     }
 
     [Fact]
@@ -72,6 +73,8 @@ public sealed class MemoryReaderContractTests
 
         Assert.Equal(typeof(MemoryReaderBlockCursor),
             typeof(MemoryReaderDocumentPage).GetProperty(nameof(MemoryReaderDocumentPage.NextCursor))!.PropertyType);
+        Assert.Equal(typeof(long?),
+            typeof(MemoryReaderDocumentPage).GetProperty(nameof(MemoryReaderDocumentPage.RecordVersion))!.PropertyType);
     }
 
     [Fact]
@@ -105,6 +108,8 @@ public sealed class MemoryReaderContractTests
 
         Assert.Equal(typeof(MemoryReaderCatalogCursor),
             typeof(MemoryReaderCatalogPage).GetProperty(nameof(MemoryReaderCatalogPage.NextCursor))!.PropertyType);
+        Assert.Equal(typeof(MemoryReaderCatalogFilter),
+            typeof(MemoryReaderCatalogRequest).GetProperty(nameof(MemoryReaderCatalogRequest.Filter))!.PropertyType);
         Assert.Contains(MemoryReaderCatalogState.CatalogNotReady, Enum.GetValues<MemoryReaderCatalogState>());
     }
 
