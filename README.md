@@ -28,9 +28,10 @@ dotnet pack ag-memory.slnx -c Release --no-build -o artifacts/local-feed
 
 ## Local Web UI
 
-`AgMemory.Web` is a separate Interactive Server host. It provides a Russian-first chat interface,
-a first-party UI-kit, local visit/thread history, and project/agent-connection pages without adding
-web or model-provider dependencies to Contracts or Core.
+`AgMemory.Web` is a separate .NET host for a Russian-first Vite single-page application. The browser
+UI is built entirely from decomposed TypeScript modules; .NET serves the local API, static SPA files
+and server-only model/storage configuration without adding web or model-provider dependencies to
+Contracts or Core.
 
 ```bash
 dotnet run --project src/AgMemory.Web/AgMemory.Web.csproj
@@ -43,10 +44,15 @@ provider, override the server-side-only settings (never browser code): `ModelGat
 `ModelGateway__Endpoint`, `ModelGateway__Model`, and `ModelGateway__ApiKey`. A configured real model is
 allowed only from loopback in Development; production enablement requires a separately implemented
 authenticated host. Requests carry antiforgery protection, are limited to 12 per minute per remote
-address, and send an upstream output-token cap. The browser transcript and navigation remain local UI
-state. In Development, the server records each submitted prompt and completed model answer as a local
-AgMemory event in the configured exact scope; later prompts retrieve up to four lexical matches as
-server-only context for Yuki. This is local persistence, not a production identity-to-scope policy.
+address, and send an upstream output-token cap. The SPA obtains its same-origin request token from
+`/api/antiforgery`; the token and cookie are never embedded in the Vite build. The browser transcript
+and navigation remain local UI state. In Development, the server records each submitted prompt and
+completed model answer as a local AgMemory event in the configured exact scope; later prompts retrieve
+up to four lexical matches as server-only context for Yuki. This is local persistence, not a production
+identity-to-scope policy.
+
+The Vite client is in `src/AgMemory.Web/client`. Run `npm test` and `npm run build` there for focused
+client verification; the Web project runs both automatically before its .NET build or test.
 
 ### Codex ↔ AgMemory
 
@@ -86,9 +92,6 @@ bands/degrees и агрегированные рёбра. `SharedEntity` озн�
 доступной совместимая 2D-карта и текстовая сводка. Three.js 0.185.1 закреплён и vendored в Web host с
 MIT-лицензией и provenance в `src/AgMemory.Web/wwwroot/vendor/three/`; страница не загружает CDN или
 другие внешние browser-зависимости.
-
-See [`docs/codebase-guide.md`](docs/codebase-guide.md) for feature ownership and
-[`docs/ui-ux-design-brief.md`](docs/ui-ux-design-brief.md) for UI behaviour and privacy boundaries.
 
 ## macOS standalone app
 

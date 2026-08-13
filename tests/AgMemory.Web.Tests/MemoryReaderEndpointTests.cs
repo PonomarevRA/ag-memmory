@@ -347,50 +347,6 @@ public sealed class MemoryReaderEndpointTests
         }
     }
 
-    [Fact]
-    public void ReaderPageAssets_KeepCursorAndAuthorityOutOfBrowserState()
-    {
-        var page = Read("src/AgMemory.Web/Features/MemoryReader/MemoryReaderPage.razor");
-        var module = FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryReaderSanitize) +
-                     FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryReaderApi);
-
-        Assert.Contains("@page \"/memory-reader\"", page, StringComparison.Ordinal);
-        Assert.DoesNotContain("MemoryReaderIndex", page, StringComparison.Ordinal);
-        Assert.DoesNotContain("actor", module, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("scope", module, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("memoryId", module, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("cursor", module, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("export const MAX_BLOCKS = 8;", module, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ReaderPage_AppendsContinuationPagesAndRestartsAtTheCatalogWithoutExposingNavigationState()
-    {
-        var page = Read("src/AgMemory.Web/Features/MemoryReader/MemoryReaderPage.razor");
-        var module = FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryReaderSanitize) +
-                     FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryReaderApi);
-
-        Assert.Contains("await LoadAsync(routeKey, token, append: true);", page, StringComparison.Ordinal);
-        Assert.Contains("Blocks = _reader.Blocks.Concat(page.Blocks).GroupBy(block => block.Id, StringComparer.Ordinal).Select(group => group.First()).ToArray()", page, StringComparison.Ordinal);
-        Assert.Contains("private async Task RestartAsync() => await LoadCatalogAsync(null, replace: true);", page, StringComparison.Ordinal);
-        Assert.Contains("await LoadCatalogAsync(token, replace: false);", page, StringComparison.Ordinal);
-        Assert.Contains("Documents = _catalog.Documents.Concat(page.Documents).GroupBy(document => document.Href, StringComparer.Ordinal).Select(group => group.First()).ToArray()", page, StringComparison.Ordinal);
-        Assert.Contains("export async function loadCatalog(token?: string | null, namespaceValue?: string | null, tag?: string | null)", module, StringComparison.Ordinal);
-        Assert.Contains("export async function loadTree()", module, StringComparison.Ordinal);
-        Assert.Contains("memory-reader-wiki", page, StringComparison.Ordinal);
-        Assert.Contains("memory-reader-wiki__tree", page, StringComparison.Ordinal);
-        Assert.Contains("@inject LocalMemoryReaderFeature ReaderFeature", page, StringComparison.Ordinal);
-        Assert.Contains("parameters.set('namespace', namespaceValue);", module, StringComparison.Ordinal);
-        Assert.Contains("parameters.set('tag', tag);", module, StringComparison.Ordinal);
-        Assert.Contains("export function isSafeNamespace(value: string)", module, StringComparison.Ordinal);
-        Assert.Contains("segments.length >= 1 && segments.length <= 6", module, StringComparison.Ordinal);
-        Assert.DoesNotContain("safeFacet(value, 'type/')", module, StringComparison.Ordinal);
-        Assert.Contains("aria-current=\"@FacetAriaCurrent(facet.Locator, _requestedNamespace)\"", page, StringComparison.Ordinal);
-        Assert.Contains("aria-current=\"@FacetAriaCurrent(facet.Locator, _requestedTag)\"", page, StringComparison.Ordinal);
-        Assert.Contains("? \"page\" : null", page, StringComparison.Ordinal);
-        Assert.DoesNotContain("continuation:", page, StringComparison.OrdinalIgnoreCase);
-    }
-
     private static MemoryReaderHostOptions Options(MemoryId homeMemoryId) => new()
     {
         Enabled = true,

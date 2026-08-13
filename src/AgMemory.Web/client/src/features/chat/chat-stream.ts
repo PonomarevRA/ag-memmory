@@ -1,4 +1,4 @@
-import { antiforgeryJsonHeaders } from '@shared/antiforgery.js';
+import { antiforgeryJsonHeaders, getAntiforgeryToken } from '@shared/antiforgery.js';
 
 const CHAT_EVENT_METHOD = 'OnChatEvent';
 const CHAT_COMPLETED_METHOD = 'OnChatCompleted';
@@ -14,7 +14,7 @@ async function publish(receiver: ChatReceiver, item: unknown): Promise<void> {
   try {
     await receiver.invokeMethodAsync(CHAT_EVENT_METHOD, item);
   } catch {
-    // SignalR circuit may close while the stream finishes.
+    // A page may navigate away while the stream finishes.
   }
 }
 
@@ -64,7 +64,7 @@ async function run(request: unknown, receiver: ChatReceiver, activeController: A
   try {
     const response = await fetch(CHAT_ROUTE, {
       method: 'POST',
-      headers: antiforgeryJsonHeaders(),
+      headers: antiforgeryJsonHeaders(await getAntiforgeryToken()),
       body: JSON.stringify(request),
       signal: activeController.signal,
       credentials: 'same-origin'

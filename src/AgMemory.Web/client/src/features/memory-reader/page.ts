@@ -1,0 +1,9 @@
+import { loadCatalog, load, loadTree, type TreeNode } from './api.js';
+export async function memoryReaderPage(id: string): Promise<string> {
+  const [tree, content] = await Promise.all([loadTree(), id ? load(id) : loadCatalog()]);
+  const renderTree = (node: TreeNode): string => node.kind === 'document' ? `<a class="memory-reader-tree__link" href="${node.href}">${node.label}</a>` : `<details open><summary class="memory-reader-tree__folder">${node.label}</summary>${node.children.map(renderTree).join('')}</details>`;
+  const treeHtml = tree.status === 'available' ? tree.roots.map(renderTree).join('') : '';
+  if (id && 'blocks' in content && content.status === 'available') return `<section class="memory-reader-page"><div class="memory-reader-layout"><aside class="memory-reader-tree"><h2>Дерево памяти</h2>${treeHtml}</aside><article class="memory-reader-document"><header><p class="eyebrow">${content.namespace}</p><h1>${content.title}</h1></header>${content.blocks.map(block=>`<section class="memory-reader-block"><h2>${block.heading ?? ''}</h2><p class="memory-reader-block__content">${block.content.map(run=>run.text).join('')}</p></section>`).join('')}</article></div></section>`;
+  const catalog = content.status === 'available' && 'documents' in content ? content.documents.map(doc=>`<article class="memory-reader-catalog__item"><h2><a href="${doc.href}">${doc.title}</a></h2><p>${doc.preview}</p></article>`).join('') : '<p>Память недоступна или пока пуста.</p>';
+  return `<section class="memory-reader-page"><header class="page-header"><p class="eyebrow">Wiki</p><h1>Читать память</h1></header><div class="memory-reader-layout"><aside class="memory-reader-tree"><h2>Дерево памяти</h2>${treeHtml}</aside><div class="memory-reader-main"><section class="memory-reader-catalog">${catalog}</section></div></div></section>`;
+}

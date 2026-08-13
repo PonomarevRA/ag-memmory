@@ -1,0 +1,2 @@
+import { normalizedVisits, isStorageAvailable } from '../navigation/browser-state.js';
+export function historyPage(): string { const items=normalizedVisits(); return `<section class="page-header"><p class="eyebrow">Локальная история</p><h1>История посещений</h1>${!isStorageAvailable()?'<p>Локальное хранилище недоступно.</p>':''}<ul>${items.map(item=>`<li><a href="${item.route}">${item.title}</a> <small>${item.visitedAt}</small></li>`).join('') || '<li>История пока пуста.</li>'}</ul></section>`; }

@@ -1,0 +1,4 @@
+import { describe, expect, it, vi } from 'vitest';
+vi.mock('./api.js', () => ({ load: vi.fn().mockResolvedValue({ status: 'available', title: 'Card', namespace: 'project', blocks: [{ heading: 'Part', content: [{ text: 'Safe text' }] }] }), loadCatalog: vi.fn(), loadTree: vi.fn().mockResolvedValue({ status: 'available', roots: [{ kind: 'document', label: 'Card', href: '/memory-reader/card', children: [] }] }) }));
+import { memoryReaderPage } from './page.js';
+describe('memory reader page', () => { it('renders document and tree from sanitized API state', async () => { document.body.innerHTML = await memoryReaderPage('card'); expect(document.body.textContent).toContain('Safe text'); expect(document.querySelector('.memory-reader-tree a')?.getAttribute('href')).toBe('/memory-reader/card'); }); });

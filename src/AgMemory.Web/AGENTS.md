@@ -2,26 +2,20 @@
 
 | Setting | Value |
 |---------|-------|
-| **Interactivity Mode** | Server |
-| **Interactivity Scope** | Global |
+| **Interactivity Mode** | Vite single-page application |
+| **Interactivity Scope** | Browser-owned |
 
 ## Rendering configuration
 
-This project uses global Interactive Server with prerendering. It was created with
-`dotnet new blazor -int Server -ai` because chat, local visit history and UI settings require a
-single interactive circuit across the application.
-
-All pages are interactive by default through `<Routes @rendermode="InteractiveServer" />` in
-`Components/App.razor`. Do not add a page-level render mode.
+The browser receives one Vite-built SPA from `wwwroot/dist`. Routes, layout and local UX state
+are owned by TypeScript; ASP.NET Core owns only static hosting and `/api/*` contracts.
 
 ## Component and browser rules
 
-- Keep routable features in `Features/` and shared UI primitives in `UiKit/`.
-- Components execute on the server through SignalR. Never inject `HttpContext` into an interactive
-  component and never pass provider credentials or authorisation policy to the browser.
-- Browser APIs are available only through a typed `IJSRuntime` wrapper and Vite-built modules under
-  `client/src/` (published to `wwwroot/dist/`). Call interop only after `OnAfterRenderAsync` or from an
-  event handler; dispose modules asynchronously and tolerate a disconnected circuit.
+- Keep browser features decomposed under `client/src/features/`, routes in `client/src/app/`, and
+  shared browser utilities in `client/src/shared/`.
+- Never pass provider credentials, storage paths, actor IDs or authorisation policy to the browser.
+- Browser APIs are called directly by TypeScript; there is no server-rendered UI transport.
 - Before `dotnet build` or `dotnet run`, the Web project runs `npm ci`, `npm run build`, and `npm test`
   in `client/` when `package.json` is present. Use `npm run dev` there for watch rebuilds during UI work.
 - Local visit/thread data is UX state, not durable AgMemory memory. It must never contain credentials,

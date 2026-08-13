@@ -95,7 +95,7 @@ function relationList(value: unknown, maximum: number): MemoryReaderRelation[] {
   return Array.isArray(value) ? value.map(safeRelation).filter((item): item is MemoryReaderRelation => item !== null).slice(0, maximum) : [];
 }
 
-/** Firebreak: only bounded, opaque reader DTO fields reach Blazor state. */
+/** Firebreak: only bounded, opaque reader DTO fields reach browser state. */
 export function safeDocumentResponse(payload: unknown): MemoryReaderDocument {
   const body = payload as Record<string, unknown> | null;
   if (!body || !DOCUMENT_STATUS.has(String(body.status))) return unavailableDocument();

@@ -20,7 +20,7 @@ function saveScrollPosition(): void {
   scrollPositions.set(currentRoute, { x: window.scrollX, y: window.scrollY });
 }
 
-/** Restores scroll positions and wires popstate for Blazor router coexistence. */
+/** Stores route scroll positions for browser history navigation. */
 export function initialize(route: unknown): void {
   currentRoute = sanitizeRoute(route);
   const state = history.state ?? {};

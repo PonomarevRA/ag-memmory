@@ -1,9 +1,8 @@
-using AgMemory.Web.Components;
+using AgMemory.Web.Features.Antiforgery;
 using AgMemory.Web.Features.Chat;
 using AgMemory.Web.Features.MemoryGraph;
 using AgMemory.Web.Features.MemoryReader;
 using AgMemory.Web.Features.MemoryStatus;
-using AgMemory.Web.Features.Navigation;
 using AgMemory.Web.Gateway;
 using AgMemory.Web.Hosting;
 using Microsoft.AspNetCore.DataProtection;
@@ -23,8 +22,6 @@ builder.Configuration
     .AddJsonFile(LocalApplicationPaths.PersistentSettingsPath(applicationDataDirectory), optional: true, reloadOnChange: false)
     .AddEnvironmentVariables();
 
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(applicationDataDirectory, "data-protection")));
 builder.Services.AddAntiforgery();
@@ -47,7 +44,6 @@ builder.Services.AddHttpClient(OpenAiCompatibleChatGateway.HttpClientName, clien
     client.Timeout = TimeSpan.FromSeconds(45);
 });
 builder.Services.AddSingleton<IModelChatGateway, OpenAiCompatibleChatGateway>();
-builder.Services.AddScoped<BrowserStateInterop>();
 var memoryGraphOptions = builder.Configuration.GetSection(MemoryGraphHostOptions.SectionName).Get<MemoryGraphHostOptions>() ?? new();
 var memoryReaderOptions = builder.Configuration.GetSection(MemoryReaderHostOptions.SectionName).Get<MemoryReaderHostOptions>() ?? new();
 builder.Services.AddSingleton<LocalMemoryGraphFeature>(services => new(memoryGraphOptions, applicationDataDirectory,
@@ -73,14 +69,16 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+// Client unknown routes are handled by the SPA fallback below. Do not re-execute API 404s into it.
 if (!desktopHost.IsEnabled)
     app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 app.UseRateLimiter();
 
-app.MapStaticAssets();
+app.UseDefaultFiles();
+app.UseStaticFiles();
+app.MapGet(AntiforgeryEndpoint.Route, AntiforgeryEndpoint.HandleAsync);
 app.MapPost(ChatEndpoint.Route, ChatEndpoint.HandleAsync)
     .RequireRateLimiting(ChatEndpoint.RateLimitPolicy);
 app.MapGet(MemoryGraphEndpoint.Route, (HttpContext context, string? continuation, IHostEnvironment environment,
@@ -91,8 +89,16 @@ app.MapGet(MemoryReaderEndpoint.CatalogRoute, MemoryReaderEndpoint.HandleCatalog
 app.MapGet(MemoryReaderEndpoint.HomeRoute, MemoryReaderEndpoint.HandleHomeAsync);
 app.MapGet(MemoryReaderEndpoint.TreeRoute, MemoryReaderEndpoint.HandleTreeAsync);
 app.MapGet(MemoryReaderEndpoint.DocumentRoute, MemoryReaderEndpoint.HandleDocumentAsync);
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+app.MapFallback(context =>
+{
+    if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        return Task.CompletedTask;
+    }
+    context.Response.Headers.CacheControl = "no-store";
+    return context.Response.SendFileAsync(Path.Combine(app.Environment.WebRootPath, "dist", "index.html"));
+});
 
 desktopHost.OpenBrowserWhenStarted(app);
 app.Run();

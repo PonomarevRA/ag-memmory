@@ -4,9 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <RootNamespace>AgMemory.Web</RootNamespace>
-    <Description>Interactive server web host for AgMemory.</Description>
+    <Description>Vite SPA host for AgMemory.</Description>
   </PropertyGroup>
 
   <ItemGroup>
