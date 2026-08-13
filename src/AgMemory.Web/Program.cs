@@ -89,6 +89,7 @@ app.MapGet(MemoryGraphEndpoint.Route, (HttpContext context, string? continuation
 app.MapGet(MemoryStatusEndpoint.Route, MemoryStatusEndpoint.HandleAsync);
 app.MapGet(MemoryReaderEndpoint.CatalogRoute, MemoryReaderEndpoint.HandleCatalogAsync);
 app.MapGet(MemoryReaderEndpoint.HomeRoute, MemoryReaderEndpoint.HandleHomeAsync);
+app.MapGet(MemoryReaderEndpoint.TreeRoute, MemoryReaderEndpoint.HandleTreeAsync);
 app.MapGet(MemoryReaderEndpoint.DocumentRoute, MemoryReaderEndpoint.HandleDocumentAsync);
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

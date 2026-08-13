@@ -6,7 +6,7 @@ namespace AgMemory.Web.Features.MemoryGraph;
 /// <summary>Typed owner of the collocated local graph-rendering module.</summary>
 public sealed class MemoryGraphInterop : IAsyncDisposable
 {
-    internal const string ModulePath = "./Features/MemoryGraph/MemoryGraphPage.razor.js";
+    internal const string ModulePath = "/dist/memory-graph.js";
     private const string InitializeMethod = "initialize";
     private const string LoadMethod = "load";
     private const string RenderMethod = "render";

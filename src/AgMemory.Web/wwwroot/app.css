@@ -143,7 +143,25 @@ p { margin-bottom: var(--space-4); }
 
 .memory-graph-page { max-width: 74rem; }
 .memory-status-page { max-width: 64rem; }
-.memory-reader-page { max-width: 54rem; }
+.memory-reader-page { max-width: 72rem; }
+.memory-reader-wiki { display: grid; gap: var(--space-4); }
+.memory-reader-wiki__toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); align-items: flex-start; }.memory-reader-wiki__toolbar h2 { margin: 0 0 var(--space-2); font-size: 1.125rem; }
+.memory-reader-wiki__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.memory-reader-wiki__tree { display: grid; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); }
+.memory-reader-layout { display: grid; gap: var(--space-4); grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr); align-items: start; }
+.memory-reader-tree { position: sticky; top: 5.5rem; display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised); max-height: calc(100vh - 7rem); overflow: auto; }
+.memory-reader-tree__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }.memory-reader-tree__header h2 { margin: 0; font-size: 1rem; }
+.memory-reader-tree__nav { display: grid; gap: var(--space-1); }
+.memory-reader-tree__branch { margin: 0; }.memory-reader-tree__branch > summary { cursor: pointer; list-style: none; }.memory-reader-tree__branch > summary::-webkit-details-marker { display: none; }
+.memory-reader-tree__folder { display: block; padding: .2rem 0; color: var(--text-muted); font-size: .875rem; font-weight: 600; }
+.memory-reader-tree__link { display: block; padding: .25rem 0 .25rem .75rem; color: var(--text); text-decoration: none; border-left: 2px solid transparent; overflow-wrap: anywhere; }.memory-reader-tree__link:hover { color: var(--accent); }.memory-reader-tree__link.is-active { border-left-color: var(--accent); color: var(--accent); }
+.memory-reader-tree__children { display: grid; gap: var(--space-1); padding-left: .75rem; border-left: 1px solid var(--border); margin: .25rem 0 .5rem; }
+.memory-reader-main { min-width: 0; }
+.memory-reader-links { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-card); overflow-x: auto; }.memory-reader-links h2 { margin: 0; font-size: 1rem; }
+.memory-reader-links__table { width: 100%; border-collapse: collapse; font-size: .9375rem; }.memory-reader-links__table th, .memory-reader-links__table td { padding: .55rem .65rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }.memory-reader-links__table th { color: var(--text-muted); font-weight: 600; }
+.memory-reader-link-kind { display: inline-block; padding: .1rem .45rem; border-radius: 999px; font-size: .75rem; background: color-mix(in srgb, var(--accent) 12%, transparent); }.memory-reader-link-kind--child { background: color-mix(in srgb, #3b82f6 14%, transparent); }.memory-reader-link-kind--related { background: color-mix(in srgb, #8b5cf6 14%, transparent); }.memory-reader-link-kind--backlink { background: color-mix(in srgb, #10b981 14%, transparent); }
+.memory-reader-link-weight { display: inline-flex; min-width: 1.75rem; justify-content: center; padding: .1rem .35rem; border-radius: .35rem; font-variant-numeric: tabular-nums; font-weight: 600; background: var(--surface); border: 1px solid var(--border); }
+@media (max-width: 62rem) { .memory-reader-layout { grid-template-columns: 1fr; }.memory-reader-tree { position: static; max-height: none; } }
 .memory-reader-document { display: grid; gap: var(--space-4); }
 .memory-reader-document-header { display: grid; gap: var(--space-2); }.memory-reader-document-header h1 { margin: 0; }
 .memory-reader-relations { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-card); }.memory-reader-relations h2 { margin: 0; font-size: 1rem; }.memory-reader-relations ul { margin: 0; padding-left: 1.25rem; }.memory-reader-relation-weight { color: var(--text-muted); }

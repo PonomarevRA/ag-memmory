@@ -5,7 +5,7 @@ namespace AgMemory.Web.Features.Navigation;
 /// <summary>Typed owner of the collocated browser-state module and its server-circuit lifecycle.</summary>
 public sealed class BrowserStateInterop : IAsyncDisposable
 {
-    internal const string ModulePath = "./Features/Navigation/NavigationTracker.razor.js";
+    internal const string ModulePath = "/dist/navigation.js";
     private const string InitializeMethod = "initialize";
     private const string TrackVisitMethod = "trackVisit";
     private const string LoadVisitsMethod = "loadVisits";

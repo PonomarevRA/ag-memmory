@@ -56,3 +56,7 @@ TestResults/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Node / Vite (AgMemory.Web client)
+**/node_modules/
+src/AgMemory.Web/wwwroot/dist/

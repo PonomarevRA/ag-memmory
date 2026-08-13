@@ -5,7 +5,7 @@ namespace AgMemory.Web.Features.MemoryReader;
 /// <summary>Typed owner of the collocated local reader fetch module.</summary>
 public sealed class MemoryReaderInterop : IAsyncDisposable
 {
-    internal const string ModulePath = "./Features/MemoryReader/MemoryReaderPage.razor.js";
+    internal const string ModulePath = "/dist/memory-reader.js";
     private readonly IJSRuntime _js;
     private IJSObjectReference? _module;
 
@@ -16,6 +16,9 @@ public sealed class MemoryReaderInterop : IAsyncDisposable
 
     public async ValueTask<MemoryReaderCatalogApiResponse?> LoadCatalogAsync(string? token, string? @namespace, string? tag) =>
         await (await GetModuleAsync()).InvokeAsync<MemoryReaderCatalogApiResponse?>("loadCatalog", token, @namespace, tag);
+
+    public async ValueTask<MemoryReaderTreeApiResponse?> LoadTreeAsync() =>
+        await (await GetModuleAsync()).InvokeAsync<MemoryReaderTreeApiResponse?>("loadTree");
 
     private async ValueTask<IJSObjectReference> GetModuleAsync() =>
         _module ??= await _js.InvokeAsync<IJSObjectReference>("import", ModulePath);

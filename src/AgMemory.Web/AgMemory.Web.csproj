@@ -18,4 +18,11 @@
     <ProjectReference Include="../AgMemory.Storage.LanceDb/AgMemory.Storage.LanceDb.csproj" />
   </ItemGroup>
 
+  <Target Name="BuildWebClient" BeforeTargets="Build" Condition="Exists('$(MSBuildProjectDirectory)/client/package.json')">
+    <Message Importance="high" Text="Building AgMemory Web Vite client..." />
+    <Exec Command="npm ci" WorkingDirectory="$(MSBuildProjectDirectory)/client" />
+    <Exec Command="npm run build" WorkingDirectory="$(MSBuildProjectDirectory)/client" />
+    <Exec Command="npm test" WorkingDirectory="$(MSBuildProjectDirectory)/client" />
+  </Target>
+
 </Project>

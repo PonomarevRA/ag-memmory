@@ -2,6 +2,7 @@
 @page "/memory-reader/{RouteKey}"
 @implements IAsyncDisposable
 @inject IJSRuntime JS
+@inject LocalMemoryReaderFeature ReaderFeature
 
 <PageTitle>Читать память · AgMemory</PageTitle>
 
@@ -12,6 +13,36 @@
         <p>Документ открыт в явно настроенном локальном scope. Переходы по ссылкам проверяются сервером заново.</p>
     </header>
 
+    <div class="memory-reader-layout">
+        <aside class="memory-reader-tree" aria-label="Дерево wiki-памяти">
+            <div class="memory-reader-tree__header">
+                <h2>Дерево</h2>
+                <button class="ui-button ui-button--secondary" type="button" @onclick="ReloadTreeAsync">Обновить</button>
+            </div>
+            @if (_treeLoading)
+            {
+                <p class="small-copy">Загрузка дерева…</p>
+            }
+            else if (_treePage?.Status == "catalog-not-ready")
+            {
+                <p class="small-copy">Каталог готовится — дерево появится после сборки.</p>
+            }
+            else if (_treePage?.Status != "available" || _treePage.Roots.Count == 0)
+            {
+                <p class="small-copy">Дерево недоступно или пусто.</p>
+            }
+            else
+            {
+                <nav class="memory-reader-tree__nav">
+                    @foreach (var node in _treePage.Roots)
+                    {
+                        @TreeNode(node, 0, ActiveDocumentHref())
+                    }
+                </nav>
+            }
+        </aside>
+
+        <div class="memory-reader-main">
     @if (_loading)
     {
         <UiStatusBanner Kind="UiStatusKind.Info" Title="Загрузка документа">
@@ -37,47 +68,85 @@
     }
     else if (RouteKey is null && _catalog?.Status == "available")
     {
-        <section class="memory-reader-catalog" aria-live="polite">
-            <p class="small-copy">Все active и неистёкшие записи из настроенного exact scope. Показано: @_catalog.Documents.Count.</p>
-            @if (_catalog.Namespaces.Count > 0 || _catalog.Tags.Count > 0)
+        <section class="memory-reader-wiki" aria-live="polite">
+            <div class="memory-reader-wiki__toolbar">
+                <div>
+                    <h2>Структура wiki</h2>
+                    <p class="small-copy">Namespace → тип записи → страницы. Явные ссылки <code>[[doc:...]]</code> вкладывают дочерние страницы; вес показан у вложенных узлов.</p>
+                </div>
+                <div class="memory-reader-wiki__actions">
+                    <button class="ui-button ui-button--secondary" type="button" @onclick="ReloadTreeAsync">Обновить дерево</button>
+                    <button class="ui-button ui-button--ghost" type="button" @onclick="ToggleFlatCatalog">@(_showFlatCatalog ? "Скрыть список" : "Плоский список")</button>
+                </div>
+            </div>
+
+            @if (_treeLoading)
             {
-                <nav class="memory-reader-facets" aria-label="Фильтры wiki-памяти">
-                    <div class="memory-reader-facets__group">
-                        <span>Namespace</span>
-                        @foreach (var facet in _catalog.Namespaces)
-                        {
-                            <a class="@FacetClass(facet.Locator, _requestedNamespace)" aria-current="@FacetAriaCurrent(facet.Locator, _requestedNamespace)" href="@CatalogHref(facet.Locator, _requestedTag)">@facet.Label <small>@facet.Count</small></a>
-                        }
-                    </div>
-                    <div class="memory-reader-facets__group">
-                        <span>Теги</span>
-                        @foreach (var facet in _catalog.Tags)
-                        {
-                            <a class="@FacetClass(facet.Locator, _requestedTag)" aria-current="@FacetAriaCurrent(facet.Locator, _requestedTag)" href="@CatalogHref(_requestedNamespace, facet.Locator)">@facet.Label <small>@facet.Count</small></a>
-                        }
-                    </div>
-                    @if (_requestedNamespace is not null || _requestedTag is not null)
+                <UiStatusBanner Kind="UiStatusKind.Info" Title="Сборка дерева">Строим ограниченную wiki-структуру из локального каталога.</UiStatusBanner>
+            }
+            else if (_treePage?.Status == "catalog-not-ready")
+            {
+                <UiStatusBanner Kind="UiStatusKind.Info" Title="Каталог памяти готовится">Локальные записи появятся после завершения безопасной серверной сборки.</UiStatusBanner>
+            }
+            else if (_treePage?.Status != "available" || _treePage.Roots.Count == 0)
+            {
+                <UiStatusBanner Kind="UiStatusKind.Warning" Title="Wiki-структура пуста">В настроенном scope нет eligible записей для дерева.</UiStatusBanner>
+            }
+            else
+            {
+                <nav class="memory-reader-wiki__tree" aria-label="Основное дерево wiki-памяти">
+                    @foreach (var node in _treePage.Roots)
                     {
-                        <a class="inline-action" href="/memory-reader">Сбросить фильтры</a>
+                        @TreeNode(node, 0, ActiveDocumentHref())
                     }
                 </nav>
             }
-            @foreach (var document in _catalog.Documents)
+
+            @if (_showFlatCatalog)
             {
-                <article class="memory-reader-catalog__item" @key="document.Href">
-                    <p class="eyebrow">@document.Namespace · @document.Type</p>
-                    <h2>@document.Title</h2>
-                    @if (document.Tags.Count > 0)
+                <section class="memory-reader-catalog">
+                    <p class="small-copy">Плоский список active и неистёкших записей. Показано: @_catalog.Documents.Count.</p>
+                    @if (_catalog.Namespaces.Count > 0 || _catalog.Tags.Count > 0)
                     {
-                        <p class="memory-reader-card-tags" aria-label="Теги записи">@string.Join(" · ", document.Tags.Take(3))</p>
+                        <nav class="memory-reader-facets" aria-label="Фильтры wiki-памяти">
+                            <div class="memory-reader-facets__group">
+                                <span>Namespace</span>
+                                @foreach (var facet in _catalog.Namespaces)
+                                {
+                                    <a class="@FacetClass(facet.Locator, _requestedNamespace)" aria-current="@FacetAriaCurrent(facet.Locator, _requestedNamespace)" href="@CatalogHref(facet.Locator, _requestedTag)">@facet.Label <small>@facet.Count</small></a>
+                                }
+                            </div>
+                            <div class="memory-reader-facets__group">
+                                <span>Теги</span>
+                                @foreach (var facet in _catalog.Tags)
+                                {
+                                    <a class="@FacetClass(facet.Locator, _requestedTag)" aria-current="@FacetAriaCurrent(facet.Locator, _requestedTag)" href="@CatalogHref(_requestedNamespace, facet.Locator)">@facet.Label <small>@facet.Count</small></a>
+                                }
+                            </div>
+                            @if (_requestedNamespace is not null || _requestedTag is not null)
+                            {
+                                <a class="inline-action" href="/memory-reader">Сбросить фильтры</a>
+                            }
+                        </nav>
                     }
-                    <p>@document.Preview</p>
-                    <a class="ui-button ui-button--secondary" href="@document.Href">Открыть запись</a>
-                </article>
-            }
-            @if (!string.IsNullOrWhiteSpace(_catalog.NextToken))
-            {
-                <div class="memory-reader-actions"><button class="ui-button" type="button" @onclick="LoadMoreCatalogAsync">Показать ещё 20</button></div>
+                    @foreach (var document in _catalog.Documents)
+                    {
+                        <article class="memory-reader-catalog__item" @key="document.Href">
+                            <p class="eyebrow">@document.Namespace · @document.Type</p>
+                            <h3>@document.Title</h3>
+                            @if (document.Tags.Count > 0)
+                            {
+                                <p class="memory-reader-card-tags" aria-label="Теги записи">@string.Join(" · ", document.Tags.Take(3))</p>
+                            }
+                            <p>@document.Preview</p>
+                            <a class="ui-button ui-button--secondary" href="@document.Href">Открыть запись</a>
+                        </article>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_catalog.NextToken))
+                    {
+                        <div class="memory-reader-actions"><button class="ui-button" type="button" @onclick="LoadMoreCatalogAsync">Показать ещё 20</button></div>
+                    }
+                </section>
             }
         </section>
     }
@@ -111,7 +180,35 @@
                 <p class="memory-reader-card-tags" aria-label="Теги записи">@string.Join(" · ", _reader.Tags)</p>
             }
         </header>
-        @if (_reader.Children.Count > 0 || _reader.Related.Count > 0 || _reader.Backlinks.Count > 0)
+        @if (_reader?.Status == "available" && HasRelations(_reader))
+        {
+            <section class="memory-reader-links" aria-label="Связи и веса">
+                <h2>Связи и веса</h2>
+                <p class="small-copy">Вес — число общих нормализованных сущностей между записями в текущем поколении каталога.</p>
+                <table class="memory-reader-links__table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Метка</th>
+                            <th scope="col">Тип</th>
+                            <th scope="col">Вес</th>
+                            <th scope="col">Цель</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var relation in AllRelations(_reader).OrderByDescending(relation => relation.SharedEntityCount).ThenBy(relation => relation.Label, StringComparer.Ordinal))
+                        {
+                            <tr @key="relation.Href + relation.Kind">
+                                <td><a href="@relation.Href">@relation.Label</a></td>
+                                <td><span class="memory-reader-link-kind memory-reader-link-kind--@relation.Kind">@RelationKindLabel(relation.Kind)</span></td>
+                                <td><span class="memory-reader-link-weight" title="Структурных совпадений">@relation.SharedEntityCount</span></td>
+                                <td>@relation.Title · @relation.Namespace</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
+        }
+        @if (_reader?.Status == "available" && (_reader.Children.Count > 0 || _reader.Related.Count > 0 || _reader.Backlinks.Count > 0))
         {
             <nav class="memory-reader-relations" aria-label="Связи записи">
                 @RelationList("Дочерние страницы", _reader.Children)
@@ -119,7 +216,7 @@
                 @RelationList("Обратные ссылки", _reader.Backlinks)
             </nav>
         }
-        @if (_reader.Blocks.Count == 0)
+        @if (_reader!.Blocks.Count == 0)
         {
             <UiEmptyState Icon="◌" Title="В документе пока нет блоков" Description="Подходящая запись открыта, но в ней нет отображаемого текста." />
         }
@@ -158,6 +255,8 @@
             }
         }
     }
+        </div>
+    </div>
 </section>
 
 @code {
@@ -169,12 +268,16 @@
     private MemoryReaderInterop? _interop;
     private MemoryReaderApiResponse? _reader;
     private MemoryReaderCatalogApiResponse? _catalog;
+    private MemoryReaderTreePage? _treePage;
+    private bool _showFlatCatalog;
     private string? _requestedRouteKey;
     private string? _requestedBlockToken;
     private string? _requestedNamespace;
     private string? _requestedTag;
     private bool _loading = true;
+    private bool _treeLoading = true;
     private bool _loadRequested = true;
+    private bool _treeLoadRequested = true;
 
     protected override void OnParametersSet()
     {
@@ -190,11 +293,42 @@
     {
         if (firstRender)
             _interop = new(JS);
+        if (_treeLoadRequested && _interop is not null)
+        {
+            _treeLoadRequested = false;
+            await LoadTreeAsync();
+        }
         if (!_loadRequested || _interop is null) return;
 
         _loadRequested = false;
         if (_requestedRouteKey is null) await LoadCatalogAsync(null, replace: true);
         else await LoadAsync(_requestedRouteKey, _requestedBlockToken);
+    }
+
+    private async Task ReloadTreeAsync()
+    {
+        await LoadTreeAsync();
+    }
+
+    private void ToggleFlatCatalog()
+    {
+        _showFlatCatalog = !_showFlatCatalog;
+    }
+
+    private async Task LoadTreeAsync()
+    {
+        _treeLoading = true;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            _treePage = await ReaderFeature.ReadTreeAsync(CancellationToken.None);
+        }
+        catch
+        {
+            _treePage = null;
+        }
+        _treeLoading = false;
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task ReadMoreAsync()
@@ -264,6 +398,80 @@
         return parts.Count == 0 ? "/memory-reader" : $"/memory-reader?{string.Join('&', parts)}";
     }
 
+    private static bool HasRelations(MemoryReaderApiResponse reader) =>
+        reader.Children.Count > 0 || reader.Related.Count > 0 || reader.Backlinks.Count > 0;
+
+    private static IEnumerable<MemoryReaderRelationDto> AllRelations(MemoryReaderApiResponse reader) =>
+        reader.Children.Concat(reader.Related).Concat(reader.Backlinks);
+
+    private static string RelationKindLabel(string kind) => kind switch
+    {
+        "child" => "Дочерняя",
+        "backlink" => "Обратная",
+        _ => "Related"
+    };
+
+    private static string TreeNodeClass(MemoryReaderTreeNode node, string? activeHref) =>
+        node.Kind == "document" && string.Equals(node.Href, activeHref, StringComparison.Ordinal)
+            ? "memory-reader-tree__link is-active"
+            : node.Kind == "document" ? "memory-reader-tree__link" : "memory-reader-tree__folder";
+
+    private static string FolderLabel(MemoryReaderTreeNode node) =>
+        node.ItemCount is > 0 ? $"{node.Label} ({node.ItemCount})" : node.Label;
+
+    private string? ActiveDocumentHref() =>
+        _requestedRouteKey is null ? null : $"/memory-reader/{Uri.EscapeDataString(_requestedRouteKey)}";
+
+    private static RenderFragment TreeNode(MemoryReaderTreeNode node, int depth, string? activeHref) => builder =>
+    {
+        var sequence = 0;
+        if (node.Kind == "document")
+        {
+            builder.OpenElement(sequence++, "a");
+            builder.AddAttribute(sequence++, "class", TreeNodeClass(node, activeHref));
+            builder.AddAttribute(sequence++, "href", node.Href);
+            if (string.Equals(node.Href, activeHref, StringComparison.Ordinal))
+                builder.AddAttribute(sequence++, "aria-current", "page");
+            builder.AddContent(sequence++, node.Label);
+            if (node.LinkWeight is > 0)
+            {
+                builder.AddContent(sequence++, " ");
+                builder.OpenElement(sequence++, "span");
+                builder.AddAttribute(sequence++, "class", "memory-reader-link-weight");
+                builder.AddAttribute(sequence++, "title", "Вес связи");
+                builder.AddContent(sequence++, node.LinkWeight.Value);
+                builder.CloseElement();
+            }
+            builder.CloseElement();
+            if (node.Children.Count > 0)
+            {
+                builder.OpenElement(sequence++, "div");
+                builder.AddAttribute(sequence++, "class", "memory-reader-tree__children");
+                foreach (var child in node.Children)
+                    builder.AddContent(sequence++, TreeNode(child, depth + 1, activeHref));
+                builder.CloseElement();
+            }
+            return;
+        }
+
+        builder.OpenElement(sequence++, "details");
+        builder.AddAttribute(sequence++, "class", "memory-reader-tree__branch");
+        if (depth < 2) builder.AddAttribute(sequence++, "open", true);
+        builder.OpenElement(sequence++, "summary");
+        builder.AddAttribute(sequence++, "class", "memory-reader-tree__folder");
+        builder.AddContent(sequence++, FolderLabel(node));
+        builder.CloseElement();
+        if (node.Children.Count > 0)
+        {
+            builder.OpenElement(sequence++, "div");
+            builder.AddAttribute(sequence++, "class", "memory-reader-tree__children");
+            foreach (var child in node.Children)
+                builder.AddContent(sequence++, TreeNode(child, depth + 1, activeHref));
+            builder.CloseElement();
+        }
+        builder.CloseElement();
+    };
+
     private static RenderFragment RelationList(string title, IReadOnlyList<MemoryReaderRelationDto> relations) => builder =>
     {
         if (relations.Count == 0) return;
@@ -281,13 +489,15 @@
             builder.AddContent(sequence++, relation.Label);
             builder.CloseElement();
             builder.AddContent(sequence++, $" · {relation.Namespace}");
-            if (relation.SharedEntityCount > 0)
-            {
-                builder.OpenElement(sequence++, "small");
-                builder.AddAttribute(sequence++, "class", "memory-reader-relation-weight");
-                builder.AddContent(sequence++, $" · структурных совпадений: {relation.SharedEntityCount}");
-                builder.CloseElement();
-            }
+            builder.OpenElement(sequence++, "span");
+            builder.AddAttribute(sequence++, "class", $"memory-reader-link-kind memory-reader-link-kind--{relation.Kind}");
+            builder.AddContent(sequence++, RelationKindLabel(relation.Kind));
+            builder.CloseElement();
+            builder.OpenElement(sequence++, "span");
+            builder.AddAttribute(sequence++, "class", "memory-reader-relation-weight");
+            builder.AddAttribute(sequence++, "title", "Структурных совпадений");
+            builder.AddContent(sequence++, $" · вес: {relation.SharedEntityCount}");
+            builder.CloseElement();
             builder.CloseElement();
         }
         builder.CloseElement();

@@ -5,7 +5,7 @@ namespace AgMemory.Web.Features.MemoryStatus;
 /// <summary>Typed owner of the collocated, same-origin status fetch module.</summary>
 public sealed class MemoryStatusInterop : IAsyncDisposable
 {
-    internal const string ModulePath = "./Features/MemoryStatus/MemoryStatusPage.razor.js";
+    internal const string ModulePath = "/dist/memory-status.js";
     private const string LoadMethod = "load";
     private readonly IJSRuntime _js;
     private IJSObjectReference? _module;

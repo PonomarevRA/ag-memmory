@@ -5,6 +5,9 @@ namespace AgMemory.Web.Tests;
 
 public sealed class MemoryGraphUniverseAssetTests
 {
+    private static string GraphSanitize => FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryGraphSanitize);
+    private static string GraphController => FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryGraphController);
+    private static string SharedFetch => FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.SharedFetch);
     [Fact]
     public void ThreeJs_IsPinnedVendoredAndLocallyImported()
     {
@@ -26,16 +29,16 @@ public sealed class MemoryGraphUniverseAssetTests
     [Fact]
     public void BrowserFirebreak_CapsAndSanitizesBeforeEitherRendererReceivesASnapshot()
     {
-        var module = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor.js");
+        var module = GraphSanitize + GraphController;
 
-        Assert.Contains("const MAX_NODES = 150;", module, StringComparison.Ordinal);
-        Assert.Contains("const MAX_EDGES = 150;", module, StringComparison.Ordinal);
+        Assert.Contains("export const MAX_NODES = 150;", module, StringComparison.Ordinal);
+        Assert.Contains("export const MAX_EDGES = 150;", module, StringComparison.Ordinal);
         Assert.Contains("if (nodes.length === MAX_NODES) break;", module, StringComparison.Ordinal);
         Assert.Contains("if (edges.length === MAX_EDGES) break;", module, StringComparison.Ordinal);
-        Assert.Contains("edge.kind !== 'SharedEntity'", module, StringComparison.Ordinal);
-        Assert.Contains("edge.sourceId === edge.targetId", module, StringComparison.Ordinal);
+        Assert.Contains("row.kind !== 'SharedEntity'", module, StringComparison.Ordinal);
+        Assert.Contains("row.sourceId === row.targetId", module, StringComparison.Ordinal);
         Assert.Contains("currentSnapshot = safeResponse(snapshot);", module, StringComparison.Ordinal);
-        Assert.Contains("return safeResponse(await response.json());", module, StringComparison.Ordinal);
+        Assert.Contains("return payload ? safeResponse(payload) : unavailable();", module, StringComparison.Ordinal);
         Assert.DoesNotContain("actorId", module, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("memoryId", module, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("provenance", module, StringComparison.OrdinalIgnoreCase);
@@ -44,7 +47,7 @@ public sealed class MemoryGraphUniverseAssetTests
     [Fact]
     public void LayoutStability_UsesOnlyGenericLocalKeysInsteadOfRenewedOpaqueIds()
     {
-        var module = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor.js");
+        var module = GraphSanitize;
         var universe = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-universe.js");
         var page = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor");
 
@@ -61,7 +64,7 @@ public sealed class MemoryGraphUniverseAssetTests
     [Fact]
     public void RendererModules_AreLocalOnlyAndHaveNoPerpetualAnimationLoop()
     {
-        var module = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor.js");
+        var module = GraphSanitize + GraphController + SharedFetch;
         var universe = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-universe.js");
         var fallback = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-renderer.js");
 
@@ -80,7 +83,7 @@ public sealed class MemoryGraphUniverseAssetTests
     [Fact]
     public void WebGlFailureReducedMotionAndDisposal_HaveCompatibleFallbackPaths()
     {
-        var module = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor.js");
+        var module = GraphController;
         var universe = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-universe.js");
 
         Assert.Contains("function activateFallback()", module, StringComparison.Ordinal);
@@ -118,7 +121,7 @@ public sealed class MemoryGraphUniverseAssetTests
     public void PagedGraph_PreservesViewAndOpaqueSelectionAcrossTwentyFiveNodePortionsIncludingTheTwoDimensionalFallback()
     {
         var page = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor");
-        var module = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor.js");
+        var module = GraphController;
         var universe = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-universe.js");
         var fallback = Read("src/AgMemory.Web/wwwroot/vendor/memory-graph-renderer.js");
 

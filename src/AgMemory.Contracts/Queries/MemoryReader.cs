@@ -14,6 +14,8 @@ public static class MemoryReaderLimits
     public const int MaximumCatalogTagFacets = 64;
     public const int MaximumCatalogTagEntityCharacters = 256;
     public const int MaximumCatalogTagLabelCharacters = 80;
+    public const int MaximumTreeNodes = 256;
+    public const int MaximumTreeNamespaceDepth = 8;
 }
 
 /// <summary>Requests the server-configured home document for exactly one authorised scope.</summary>

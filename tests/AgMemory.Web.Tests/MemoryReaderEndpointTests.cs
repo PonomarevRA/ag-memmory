@@ -243,9 +243,21 @@ public sealed class MemoryReaderEndpointTests
             Assert.Equal("engineering/core", document.Namespace);
             Assert.Equal(["shared tag"], document.Tags);
             Assert.Single(document.Children);
+            Assert.Equal("child", document.Children[0].Kind);
             Assert.Equal("Outcome", document.Children[0].Label);
             Assert.Single(document.Related);
+            Assert.Equal("related", document.Related[0].Kind);
             Assert.Equal("Related outcome", document.Related[0].Label);
+
+            context = Context(IPAddress.Loopback);
+            var tree = await ExecuteTreeAsync(await MemoryReaderEndpoint.HandleTreeAsync(
+                context, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+            Assert.Equal("available", tree.Status);
+            var engineeringTree = Assert.Single(tree.Roots, node => node.Label == "engineering");
+            var coreTree = Assert.Single(engineeringTree.Children, node => node.Label == "core");
+            var factType = Assert.Single(coreTree.Children, node => node.Label == "Fact");
+            var factNode = Assert.Single(factType.Children, node => node.Label == "Fact title");
+            Assert.Contains(factNode.Children, node => node.Label == "Outcome" && node.LinkWeight == 1);
 
             var outcomeRouteKey = document.Children[0].Href.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
             context = Context(IPAddress.Loopback);
@@ -309,9 +321,12 @@ public sealed class MemoryReaderEndpointTests
         var properties = typeof(MemoryReaderApiResponse).GetProperties()
             .Concat(typeof(MemoryReaderBlockDto).GetProperties())
             .Concat(typeof(MemoryReaderInlineDto).GetProperties())
+            .Concat(typeof(MemoryReaderRelationDto).GetProperties())
             .Concat(typeof(MemoryReaderCatalogApiResponse).GetProperties())
             .Concat(typeof(MemoryReaderCatalogDocumentDto).GetProperties())
-            .Concat(typeof(MemoryReaderCatalogFacetDto).GetProperties());
+            .Concat(typeof(MemoryReaderCatalogFacetDto).GetProperties())
+            .Concat(typeof(MemoryReaderTreeApiResponse).GetProperties())
+            .Concat(typeof(MemoryReaderTreeNodeDto).GetProperties());
         var prohibited = new[] { "Actor", "Scope", "MemoryId", "HomeMemory", "Cursor", "Storage", "Policy", "Provenance", "Embedding" };
 
         Assert.All(properties, property =>
@@ -321,7 +336,8 @@ public sealed class MemoryReaderEndpointTests
                  {
                      typeof(MemoryReaderEndpoint).GetMethod(nameof(MemoryReaderEndpoint.HandleHomeAsync), BindingFlags.Public | BindingFlags.Static)!,
                      typeof(MemoryReaderEndpoint).GetMethod(nameof(MemoryReaderEndpoint.HandleDocumentAsync), BindingFlags.Public | BindingFlags.Static)!,
-                     typeof(MemoryReaderEndpoint).GetMethod(nameof(MemoryReaderEndpoint.HandleCatalogAsync), BindingFlags.Public | BindingFlags.Static)!
+                     typeof(MemoryReaderEndpoint).GetMethod(nameof(MemoryReaderEndpoint.HandleCatalogAsync), BindingFlags.Public | BindingFlags.Static)!,
+                     typeof(MemoryReaderEndpoint).GetMethod(nameof(MemoryReaderEndpoint.HandleTreeAsync), BindingFlags.Public | BindingFlags.Static)!
                  })
         {
             Assert.DoesNotContain(handler.GetParameters(), parameter =>
@@ -335,7 +351,8 @@ public sealed class MemoryReaderEndpointTests
     public void ReaderPageAssets_KeepCursorAndAuthorityOutOfBrowserState()
     {
         var page = Read("src/AgMemory.Web/Features/MemoryReader/MemoryReaderPage.razor");
-        var module = Read("src/AgMemory.Web/Features/MemoryReader/MemoryReaderPage.razor.js");
+        var module = FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryReaderSanitize) +
+                     FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryReaderApi);
 
         Assert.Contains("@page \"/memory-reader\"", page, StringComparison.Ordinal);
         Assert.DoesNotContain("MemoryReaderIndex", page, StringComparison.Ordinal);
@@ -343,24 +360,29 @@ public sealed class MemoryReaderEndpointTests
         Assert.DoesNotContain("scope", module, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("memoryId", module, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("cursor", module, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("const MAX_BLOCKS = 8;", module, StringComparison.Ordinal);
+        Assert.Contains("export const MAX_BLOCKS = 8;", module, StringComparison.Ordinal);
     }
 
     [Fact]
     public void ReaderPage_AppendsContinuationPagesAndRestartsAtTheCatalogWithoutExposingNavigationState()
     {
         var page = Read("src/AgMemory.Web/Features/MemoryReader/MemoryReaderPage.razor");
-        var module = Read("src/AgMemory.Web/Features/MemoryReader/MemoryReaderPage.razor.js");
+        var module = FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryReaderSanitize) +
+                     FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryReaderApi);
 
         Assert.Contains("await LoadAsync(routeKey, token, append: true);", page, StringComparison.Ordinal);
         Assert.Contains("Blocks = _reader.Blocks.Concat(page.Blocks).GroupBy(block => block.Id, StringComparer.Ordinal).Select(group => group.First()).ToArray()", page, StringComparison.Ordinal);
         Assert.Contains("private async Task RestartAsync() => await LoadCatalogAsync(null, replace: true);", page, StringComparison.Ordinal);
         Assert.Contains("await LoadCatalogAsync(token, replace: false);", page, StringComparison.Ordinal);
         Assert.Contains("Documents = _catalog.Documents.Concat(page.Documents).GroupBy(document => document.Href, StringComparer.Ordinal).Select(group => group.First()).ToArray()", page, StringComparison.Ordinal);
-        Assert.Contains("export async function loadCatalog(token, namespaceValue, tag)", module, StringComparison.Ordinal);
+        Assert.Contains("export async function loadCatalog(token?: string | null, namespaceValue?: string | null, tag?: string | null)", module, StringComparison.Ordinal);
+        Assert.Contains("export async function loadTree()", module, StringComparison.Ordinal);
+        Assert.Contains("memory-reader-wiki", page, StringComparison.Ordinal);
+        Assert.Contains("memory-reader-wiki__tree", page, StringComparison.Ordinal);
+        Assert.Contains("@inject LocalMemoryReaderFeature ReaderFeature", page, StringComparison.Ordinal);
         Assert.Contains("parameters.set('namespace', namespaceValue);", module, StringComparison.Ordinal);
         Assert.Contains("parameters.set('tag', tag);", module, StringComparison.Ordinal);
-        Assert.Contains("function isSafeNamespace(value)", module, StringComparison.Ordinal);
+        Assert.Contains("export function isSafeNamespace(value: string)", module, StringComparison.Ordinal);
         Assert.Contains("segments.length >= 1 && segments.length <= 6", module, StringComparison.Ordinal);
         Assert.DoesNotContain("safeFacet(value, 'type/')", module, StringComparison.Ordinal);
         Assert.Contains("aria-current=\"@FacetAriaCurrent(facet.Locator, _requestedNamespace)\"", page, StringComparison.Ordinal);
@@ -431,6 +453,14 @@ public sealed class MemoryReaderEndpointTests
         await result.ExecuteAsync(context);
         context.Response.Body.Position = 0;
         return (await JsonSerializer.DeserializeAsync<MemoryReaderCatalogApiResponse>(
+            context.Response.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web)))!;
+    }
+
+    private static async Task<MemoryReaderTreeApiResponse> ExecuteTreeAsync(IResult result, HttpContext context)
+    {
+        await result.ExecuteAsync(context);
+        context.Response.Body.Position = 0;
+        return (await JsonSerializer.DeserializeAsync<MemoryReaderTreeApiResponse>(
             context.Response.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web)))!;
     }
 

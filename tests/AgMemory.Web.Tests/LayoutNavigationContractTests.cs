@@ -36,7 +36,8 @@ public sealed class LayoutNavigationContractTests
     public void GraphAssets_UseOneOpaqueKeyAcrossViewsAndExposeNoLabelOrOrdinalJoin()
     {
         var page = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor");
-        var module = Read("src/AgMemory.Web/Features/MemoryGraph/MemoryGraphPage.razor.js");
+        var module = FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryGraphSanitize) +
+                     FrontendSourcePaths.ReadAbsolute(FrontendSourcePaths.MemoryGraphController);
 
         Assert.Contains("SelectNodeAsync(node.Id)", page, StringComparison.Ordinal);
         Assert.Contains("node.layoutKey = node.id", module, StringComparison.Ordinal);

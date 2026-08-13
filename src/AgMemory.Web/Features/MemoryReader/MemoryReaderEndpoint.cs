@@ -9,6 +9,7 @@ public static class MemoryReaderEndpoint
 {
     public const string CatalogRoute = "/api/memory-reader";
     public const string HomeRoute = "/api/memory-reader/home";
+    public const string TreeRoute = "/api/memory-reader/tree";
     public const string DocumentRoute = "/api/memory-reader/{routeKey}";
 
     public static async Task<IResult> HandleHomeAsync(
@@ -67,6 +68,24 @@ public static class MemoryReaderEndpoint
         catch { return CatalogJson(MemoryReaderCatalogApiResponse.Unavailable); }
     }
 
+    public static async Task<IResult> HandleTreeAsync(
+        HttpContext context,
+        IHostEnvironment environment,
+        LocalMemoryReaderFeature feature,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (!MemoryReaderAccessPolicy.AllowsStoreAccess(feature.IsConfigured, environment.IsDevelopment(), context.Connection.RemoteIpAddress))
+            return TreeJson(MemoryReaderTreeApiResponse.Unavailable);
+        try
+        {
+            var page = await feature.ReadTreeAsync(cancellationToken).ConfigureAwait(false);
+            return TreeJson(ToTreeApiResponse(page));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch { return TreeJson(MemoryReaderTreeApiResponse.Unavailable); }
+    }
+
     public static async Task<IResult> HandleDocumentAsync(
         HttpContext context,
         string routeKey,
@@ -108,6 +127,17 @@ public static class MemoryReaderEndpoint
 
     private static IResult Json(MemoryReaderApiResponse response) => new MemoryReaderJsonResult(response);
     private static IResult CatalogJson(MemoryReaderCatalogApiResponse response) => new MemoryReaderCatalogJsonResult(response);
+    private static IResult TreeJson(MemoryReaderTreeApiResponse response) => new MemoryReaderTreeJsonResult(response);
+
+    private static MemoryReaderTreeApiResponse ToTreeApiResponse(MemoryReaderTreePage page) => page.Status switch
+    {
+        "available" => new("available", page.Roots.Select(ToTreeNodeDto).ToArray()),
+        "catalog-not-ready" => MemoryReaderTreeApiResponse.NotReady,
+        _ => MemoryReaderTreeApiResponse.Unavailable
+    };
+
+    private static MemoryReaderTreeNodeDto ToTreeNodeDto(MemoryReaderTreeNode node) =>
+        new(node.Kind, node.Label, node.Locator, node.Href, node.LinkWeight, node.ItemCount, node.Children.Select(ToTreeNodeDto).ToArray());
 
     private static MemoryReaderApiResponse ToApiResponse(
         MemoryReaderDocumentPage page,
@@ -138,7 +168,7 @@ public static class MemoryReaderEndpoint
     };
 
     private static IReadOnlyList<MemoryReaderRelationDto> ToRelationDtos(IReadOnlyList<LocalMemoryReaderFeature.MemoryReaderWikiRelation>? relations) =>
-        (relations ?? []).Select(relation => new MemoryReaderRelationDto(relation.Href, relation.Label, relation.Title, relation.Namespace, relation.SharedEntityCount)).ToArray();
+        (relations ?? []).Select(relation => new MemoryReaderRelationDto(relation.Href, relation.Kind, relation.Label, relation.Title, relation.Namespace, relation.SharedEntityCount)).ToArray();
 
     private static MemoryReaderCatalogApiResponse ToCatalogApiResponse(
         MemoryReaderCatalogPage page,
@@ -180,7 +210,22 @@ public sealed record MemoryReaderApiResponse(
 
 public sealed record MemoryReaderBlockDto(string Id, string? Heading, IReadOnlyList<MemoryReaderInlineDto> Content);
 public sealed record MemoryReaderInlineDto(string Kind, string Text, string? RouteKey, string? BlockToken);
-public sealed record MemoryReaderRelationDto(string Href, string Label, string Title, string Namespace, int SharedEntityCount);
+public sealed record MemoryReaderRelationDto(string Href, string Kind, string Label, string Title, string Namespace, int SharedEntityCount);
+
+public sealed record MemoryReaderTreeNodeDto(
+    string Kind,
+    string Label,
+    string? Locator,
+    string? Href,
+    int? LinkWeight,
+    int? ItemCount,
+    IReadOnlyList<MemoryReaderTreeNodeDto> Children);
+
+public sealed record MemoryReaderTreeApiResponse(string Status, IReadOnlyList<MemoryReaderTreeNodeDto> Roots)
+{
+    public static MemoryReaderTreeApiResponse Unavailable { get; } = new("unavailable", []);
+    public static MemoryReaderTreeApiResponse NotReady { get; } = new("catalog-not-ready", []);
+}
 
 public sealed record MemoryReaderCatalogApiResponse(
     string Status,
@@ -219,6 +264,18 @@ internal sealed class MemoryReaderJsonResult(MemoryReaderApiResponse response) :
 }
 
 internal sealed class MemoryReaderCatalogJsonResult(MemoryReaderCatalogApiResponse response) : IResult
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    public async Task ExecuteAsync(HttpContext context)
+    {
+        context.Response.ContentType = "application/json; charset=utf-8";
+        await JsonSerializer.SerializeAsync(context.Response.Body, response, response.GetType(), JsonOptions,
+            context.RequestAborted).ConfigureAwait(false);
+    }
+}
+
+internal sealed class MemoryReaderTreeJsonResult(MemoryReaderTreeApiResponse response) : IResult
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 

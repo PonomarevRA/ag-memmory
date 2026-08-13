@@ -76,25 +76,56 @@ public sealed class LocalMemoryReaderFeature : IAsyncDisposable
         var snapshot = await store.ReadWikiDocumentSnapshotAsync(eligibility, routeKey, recordVersion, cancellationToken).ConfigureAwait(false);
         if (snapshot is null) return null;
         return new(snapshot.Value.Metadata,
-            await ToRelationsAsync(snapshot.Value.Children, store, cancellationToken).ConfigureAwait(false),
-            await ToRelationsAsync(snapshot.Value.Related, store, cancellationToken).ConfigureAwait(false),
-            await ToRelationsAsync(snapshot.Value.Backlinks, store, cancellationToken).ConfigureAwait(false));
+            await ToRelationsAsync(snapshot.Value.Children, store, cancellationToken, MemoryWikiRelationKind.Child).ConfigureAwait(false),
+            await ToRelationsAsync(snapshot.Value.Related, store, cancellationToken, MemoryWikiRelationKind.Related).ConfigureAwait(false),
+            await ToRelationsAsync(snapshot.Value.Backlinks, store, cancellationToken, MemoryWikiRelationKind.Backlink).ConfigureAwait(false));
     }
 
-    public sealed record MemoryReaderWikiRelation(string Href, string Label, string Title, string Namespace, int SharedEntityCount);
+    public async Task<MemoryReaderTreePage> ReadTreeAsync(CancellationToken cancellationToken)
+    {
+        var configuration = _configuration ?? throw new InvalidOperationException("The local memory reader is unavailable.");
+        LanceDbMemoryStore store;
+        lock (_sync)
+        {
+            _store ??= new LanceDbMemoryStore(new(configuration.StoragePath));
+            store = _store;
+        }
+        var eligibility = new MemorySearchEligibility(new AuthorizedScopeSet([new ScopeSelector(configuration.Scope)]), null, DateTimeOffset.UtcNow);
+        var firstLeaf = await store.ReadReadyLeafPageAsync(eligibility, null, cancellationToken).ConfigureAwait(false);
+        if (firstLeaf is null) return MemoryReaderTreePage.NotReady;
+        var documents = await store.ReadWikiTreeDocumentsAsync(eligibility, firstLeaf.GenerationKey, cancellationToken).ConfigureAwait(false);
+        if (documents.Count == 0) return MemoryReaderTreePage.Empty;
+        var childEdges = await store.ReadWikiTreeChildEdgesAsync(firstLeaf.GenerationKey, cancellationToken).ConfigureAwait(false);
+        var entries = new List<MemoryReaderTreeDocumentEntry>(documents.Count);
+        foreach (var document in documents)
+        {
+            var route = await store.GetOrCreateRouteAsync(document.MemoryId, cancellationToken).ConfigureAwait(false);
+            entries.Add(new(document.MemoryId.Value, $"/memory-reader/{Uri.EscapeDataString(route.RouteKey)}", document.Title, document.Namespace, document.Type));
+        }
+        return MemoryReaderTreeBuilder.Build(entries, childEdges);
+    }
+
+    public sealed record MemoryReaderWikiRelation(string Href, string Kind, string Label, string Title, string Namespace, int SharedEntityCount);
     public sealed record MemoryReaderWikiSnapshot(MemoryWikiMetadata? Metadata, IReadOnlyList<MemoryReaderWikiRelation> Children,
         IReadOnlyList<MemoryReaderWikiRelation> Related, IReadOnlyList<MemoryReaderWikiRelation> Backlinks);
 
     private static async Task<IReadOnlyList<MemoryReaderWikiRelation>> ToRelationsAsync(
         IReadOnlyList<MemoryWikiRelationRecord> relations,
         LanceDbMemoryStore store,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        MemoryWikiRelationKind kind)
     {
+        var kindLabel = kind switch
+        {
+            MemoryWikiRelationKind.Child => "child",
+            MemoryWikiRelationKind.Related => "related",
+            _ => "backlink"
+        };
         var result = new List<MemoryReaderWikiRelation>(relations.Count);
         foreach (var relation in relations)
         {
             var route = await store.GetOrCreateRouteAsync(relation.TargetMemoryId, cancellationToken).ConfigureAwait(false);
-            result.Add(new($"/memory-reader/{Uri.EscapeDataString(route.RouteKey)}", relation.Label, relation.Title, relation.Namespace, relation.SharedEntityCount));
+            result.Add(new($"/memory-reader/{Uri.EscapeDataString(route.RouteKey)}", kindLabel, relation.Label, relation.Title, relation.Namespace, relation.SharedEntityCount));
         }
         return result;
     }
