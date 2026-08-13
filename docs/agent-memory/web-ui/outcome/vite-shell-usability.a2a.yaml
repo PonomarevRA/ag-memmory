@@ -1,0 +1,24 @@
+schema: agent-memory-object/v1
+id: web-ui.outcome.vite-shell-usability
+kind: outcome
+area: web-ui
+status: completed
+title: Restored Vite shell and mobile navigation usability
+summary: Aligned Vite shell classes with the CSS contract and added safe chat rendering, route cleanup and accessible mobile navigation.
+recorded: "2026-08-13"
+updated: "2026-08-13"
+tags: [web-ui, vite, accessibility, chat, navigation]
+sources:
+  - kind: code
+    ref: src/AgMemory.Web/client/src/app/shell.ts
+  - kind: code
+    ref: src/AgMemory.Web/client/src/features/chat/page.ts
+  - kind: test
+    ref: src/AgMemory.Web/client/src/app/routes.test.ts
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/AgMemory.Web.Tests.csproj
+payload:
+  change: Restored app-shell CSS hooks, accessible mobile navigation, status banners, chat escaping and server-aligned prompt limits.
+  measurement: Vite tests and Web tests pass; rebuilt macOS app serves the current bundle on loopback.
+  result: The migrated Vite UI no longer renders as an unstyled inline shell and safely cleans up chat and graph resources during routing.
+  next_action: Run a visual browser E2E pass at 320, 768 and 1440 pixels when a browser automation environment is available.

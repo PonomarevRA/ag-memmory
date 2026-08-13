@@ -43,3 +43,11 @@ objects:
     tags: [web-ui, branding, macos, packaging, icons]
     recorded: "2026-08-10"
     updated: "2026-08-10"
+  - id: web-ui.outcome.vite-shell-usability
+    title: Restored Vite shell and mobile navigation usability
+    status: completed
+    summary: Aligned Vite shell classes with the CSS contract and added safe chat rendering, route cleanup and accessible mobile navigation.
+    path: vite-shell-usability.a2a.yaml
+    tags: [web-ui, vite, accessibility, chat, navigation]
+    recorded: "2026-08-13"
+    updated: "2026-08-13"
