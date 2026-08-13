@@ -15,5 +15,13 @@ describe('SPA routes and shell', () => {
     expect(root.querySelector('main')?.textContent).toContain('Reader');
     expect(root.querySelector('.skip-link')?.getAttribute('href')).toBe('#main');
     expect(root.querySelector('[aria-current="page"]')?.textContent).toBe('Читать память');
+    expect(root.querySelector('.app-shell')).not.toBeNull();
+    expect(root.querySelector('.app-header')).not.toBeNull();
+    expect(root.querySelector('.primary-nav')).not.toBeNull();
+    expect(root.querySelector('.app-main')).not.toBeNull();
+    expect(root.querySelector('.app-footer')).not.toBeNull();
+    expect(root.querySelector('.header-actions .ui-button')?.textContent).toBe('Настройки');
+    expect(root.querySelector('#menu-toggle')?.getAttribute('aria-controls')).toBe('primary-navigation');
+    expect(root.querySelector('#primary-navigation .primary-nav__close')).not.toBeNull();
   });
 });
