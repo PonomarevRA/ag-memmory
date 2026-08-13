@@ -1,31 +1,35 @@
 ﻿<script type="module" src="@Assets["dist/reconnect-modal.js"]"></script>
 
 <dialog id="components-reconnect-modal" data-nosnippet>
-    <div class="components-reconnect-container">
+    <div class="components-reconnect-container" role="status" aria-live="assertive" aria-labelledby="components-reconnect-title">
+        <h2 id="components-reconnect-title">Подключение к интерфейсу</h2>
         <div class="components-rejoining-animation" aria-hidden="true">
             <div></div>
             <div></div>
         </div>
         <p class="components-reconnect-first-attempt-visible">
-            Rejoining the server...
+            Соединение потеряно. Восстанавливаем подключение…
         </p>
         <p class="components-reconnect-repeated-attempt-visible">
-            Rejoin failed... trying again in <span id="components-seconds-to-next-attempt"></span> seconds.
+            Подключиться не удалось. Следующая попытка через <span id="components-seconds-to-next-attempt"></span> сек.
         </p>
         <p class="components-reconnect-failed-visible">
-            Failed to rejoin.<br />Please retry or reload the page.
+            Подключение не восстановлено. Повторите попытку или перезагрузите страницу.
         </p>
         <button id="components-reconnect-button" class="components-reconnect-failed-visible">
-            Retry
+            Повторить
+        </button>
+        <button id="components-reconnect-reload-button" type="button" class="components-reconnect-failed-visible components-resume-failed-visible">
+            Перезагрузить страницу
         </button>
         <p class="components-pause-visible">
-            The session has been paused by the server.
+            Сеанс приостановлен сервером.
         </p>
         <p class="components-resume-failed-visible">
-            Failed to resume the session.<br />Please retry or reload the page.
+            Продолжить сеанс не удалось. Перезагрузите страницу.
         </p>
         <button id="components-resume-button" class="components-pause-visible components-resume-failed-visible">
-            Resume
+            Продолжить
         </button>
     </div>
 </dialog>

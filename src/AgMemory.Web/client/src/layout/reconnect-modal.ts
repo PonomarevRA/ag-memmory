@@ -4,7 +4,7 @@ function handleReconnectStateChanged(event: Event): void {
   const detail = (event as CustomEvent<{ state: string }>).detail;
   if (!modal) return;
 
-  if (detail.state === 'show') modal.showModal();
+  if (detail.state === 'show' && !modal.open) modal.showModal();
   else if (detail.state === 'failed') document.addEventListener('visibilitychange', retryWhenDocumentBecomesVisible);
   else if (detail.state === 'rejected') location.reload();
   else if (detail.state === 'hide') modal.close();
@@ -52,3 +52,4 @@ const reconnectModal = document.getElementById('components-reconnect-modal');
 reconnectModal?.addEventListener('components-reconnect-state-changed', handleReconnectStateChanged);
 document.getElementById('components-reconnect-button')?.addEventListener('click', () => void retry());
 document.getElementById('components-resume-button')?.addEventListener('click', () => void resume());
+document.getElementById('components-reconnect-reload-button')?.addEventListener('click', () => location.reload());
