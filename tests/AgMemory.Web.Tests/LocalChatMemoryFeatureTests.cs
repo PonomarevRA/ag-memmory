@@ -26,6 +26,8 @@ public sealed class LocalChatMemoryFeatureTests
 
             Assert.NotNull(recalled);
             Assert.Contains("local", recalled, StringComparison.OrdinalIgnoreCase);
+            Assert.StartsWith("- ", recalled, StringComparison.Ordinal);
+            Assert.DoesNotContain("[", recalled, StringComparison.Ordinal);
         }
         finally
         {

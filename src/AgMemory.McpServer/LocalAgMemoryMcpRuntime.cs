@@ -7,7 +7,7 @@ using AgMemory.Storage.LanceDb;
 namespace AgMemory.McpServer;
 
 /// <summary>Fixed local identity and exact scope supplied only by the MCP process environment.</summary>
-public sealed record LocalAgMemoryMcpConfiguration(string StoragePath, ActorId Actor, MemoryScope Scope)
+public sealed record LocalAgMemoryMcpConfiguration(string StoragePath, ActorId Actor, MemoryScope Scope, string OriginClient)
 {
     public const string StoragePathVariable = "AGMEMORY_STORAGE_PATH";
     public const string ActorIdVariable = "AGMEMORY_ACTOR_ID";
@@ -16,6 +16,8 @@ public sealed record LocalAgMemoryMcpConfiguration(string StoragePath, ActorId A
     public const string WorkspaceIdVariable = "AGMEMORY_WORKSPACE_ID";
     public const string ChatIdVariable = "AGMEMORY_CHAT_ID";
     public const string RunIdVariable = "AGMEMORY_RUN_ID";
+    /// <summary>Fixed client label recorded in provenance; it is never accepted from an MCP tool call.</summary>
+    public const string ClientIdVariable = "AGMEMORY_CLIENT_ID";
 
     public static LocalAgMemoryMcpConfiguration FromEnvironment() => Create(
         Environment.GetEnvironmentVariable(StoragePathVariable),
@@ -24,7 +26,8 @@ public sealed record LocalAgMemoryMcpConfiguration(string StoragePath, ActorId A
         Environment.GetEnvironmentVariable(ProjectIdVariable),
         Environment.GetEnvironmentVariable(WorkspaceIdVariable),
         Environment.GetEnvironmentVariable(ChatIdVariable),
-        Environment.GetEnvironmentVariable(RunIdVariable));
+        Environment.GetEnvironmentVariable(RunIdVariable),
+        Environment.GetEnvironmentVariable(ClientIdVariable));
 
     public static LocalAgMemoryMcpConfiguration Create(
         string? storagePath,
@@ -33,7 +36,8 @@ public sealed record LocalAgMemoryMcpConfiguration(string StoragePath, ActorId A
         string? projectId = null,
         string? workspaceId = null,
         string? chatId = null,
-        string? runId = null)
+        string? runId = null,
+        string? originClient = null)
     {
         if (string.IsNullOrWhiteSpace(storagePath) || string.IsNullOrWhiteSpace(actorId) || string.IsNullOrWhiteSpace(tenantId))
             throw new InvalidOperationException("AgMemory MCP requires an explicit storage path, actor ID, and tenant ID.");
@@ -42,14 +46,17 @@ public sealed record LocalAgMemoryMcpConfiguration(string StoragePath, ActorId A
         scope.Validate();
         var actor = new ActorId(actorId);
         actor.Validate(nameof(actorId));
-        return new(Path.GetFullPath(storagePath), actor, scope);
+        var client = string.IsNullOrWhiteSpace(originClient) ? "codex" : originClient.Trim();
+        if (!client.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_'))
+            throw new ArgumentException("Origin client must contain only letters, digits, hyphens, or underscores.", nameof(originClient));
+        return new(Path.GetFullPath(storagePath), actor, scope, client);
     }
 
     private static ScopeId? Optional(string? value) => string.IsNullOrWhiteSpace(value) ? null : new ScopeId(value);
 }
 
 /// <summary>
-/// Small local composition root for Codex. It never accepts actor, scope, storage path or durable IDs from a tool call.
+/// Small local composition root for a configured client. It never accepts actor, scope, storage path or durable IDs from a tool call.
 /// </summary>
 public sealed class LocalAgMemoryMcpRuntime : IAsyncDisposable
 {
@@ -57,6 +64,7 @@ public sealed class LocalAgMemoryMcpRuntime : IAsyncDisposable
     private readonly LocalAgMemoryMcpConfiguration _configuration;
     private readonly LanceDbMemoryStore _store;
     private readonly MemoryCommandService _commands;
+    private readonly MemoryQueryService _query;
 
     public LocalAgMemoryMcpRuntime(LocalAgMemoryMcpConfiguration configuration)
     {
@@ -72,6 +80,15 @@ public sealed class LocalAgMemoryMcpRuntime : IAsyncDisposable
             new SystemClock(),
             new GuidIds(),
             new MemoryCoreOptions(ContractVersion, ContractVersion));
+        _query = new MemoryQueryService(
+            _store,
+            new ExactLocalAuthorization(configuration),
+            _store,
+            _store,
+            null,
+            new LocalEmbeddingPolicy(),
+            new SystemClock(),
+            new MemoryCoreOptions(ContractVersion, ContractVersion));
     }
 
     public static LocalAgMemoryMcpRuntime FromEnvironment() => new(LocalAgMemoryMcpConfiguration.FromEnvironment());
@@ -81,20 +98,22 @@ public sealed class LocalAgMemoryMcpRuntime : IAsyncDisposable
         if (string.IsNullOrWhiteSpace(query)) throw new ArgumentException("A recall query is required.", nameof(query));
         if (limit is < 1 or > 10) throw new ArgumentOutOfRangeException(nameof(limit), "Recall limit must be from 1 through 10.");
 
-        var terms = Tokens(query);
-        var now = DateTimeOffset.UtcNow;
-        var scopes = new AuthorizedScopeSet([new ScopeSelector(_configuration.Scope)]);
-        var records = await _store.ListAsync(scopes, cancellationToken).ConfigureAwait(false);
-        return records
-            .Where(record => record.Status == MemoryLifecycleStatus.Active && (record.ExpiresAt is null || record.ExpiresAt > now))
-            .Select(record => new { Record = record, Score = Tokens(record.CanonicalText).Count(terms.Contains) })
-            .Where(candidate => candidate.Score > 0)
-            .OrderByDescending(candidate => candidate.Score)
-            .ThenByDescending(candidate => candidate.Record.UpdatedAt)
-            .ThenBy(candidate => candidate.Record.Id.Value, StringComparer.Ordinal)
-            .Take(limit)
-            .Select(candidate => new MemoryRecallItem(candidate.Record.Type.ToString(), candidate.Record.CanonicalText,
-                candidate.Record.Importance, candidate.Record.Confidence, candidate.Record.UpdatedAt))
+        var result = await _query.SearchAsync(new MemorySearchRequest(
+            _configuration.Actor,
+            _configuration.Scope,
+            query.Trim(),
+            null,
+            null,
+            null,
+            limit,
+            ContractVersion,
+            ContractVersion), cancellationToken).ConfigureAwait(false);
+        if (result.Error is not null)
+            throw new InvalidOperationException("AgMemory could not recall memories.");
+
+        return result.Hits
+            .Select(hit => new MemoryRecallItem(hit.Record.Type.ToString(), hit.Record.CanonicalText,
+                hit.Record.Importance, hit.Record.Confidence, hit.Record.UpdatedAt))
             .ToArray();
     }
 
@@ -128,9 +147,9 @@ public sealed class LocalAgMemoryMcpRuntime : IAsyncDisposable
         var command = new RememberCommand(
             new(new CommandId(Guid.NewGuid().ToString("D")), idempotencyKey, _configuration.Actor,
                 new CorrelationId(Guid.NewGuid().ToString("D")), _configuration.Scope, ContractVersion),
-            new(type, canonical, "Codex local MCP", importance, confidence, normalizedEntities,
-                new MemoryProvenance("codex-mcp", null, null, null, null, null, null,
-                    [new SourceEvidenceRef($"codex-mcp:{idempotencyKey}")]),
+            new(type, canonical, $"{_configuration.OriginClient} local MCP", importance, confidence, normalizedEntities,
+                new MemoryProvenance($"{_configuration.OriginClient}-mcp", null, null, null, null, null, null,
+                    [new SourceEvidenceRef($"{_configuration.OriginClient}-mcp:{idempotencyKey}")]),
                 EmbeddingMode: EmbeddingMode.Required));
         var result = await _commands.RememberAsync(command, cancellationToken).ConfigureAwait(false);
         if (result.Error is not null || result.Outcome == RememberOutcome.Failed)
@@ -149,12 +168,6 @@ public sealed class LocalAgMemoryMcpRuntime : IAsyncDisposable
     }
 
     public ValueTask DisposeAsync() => _store.DisposeAsync();
-
-    private static IReadOnlySet<string> Tokens(string text) => text.Split(
-            [' ', '\t', '\r', '\n', '.', ',', ';', ':', '!', '?', '(', ')', '[', ']', '{', '}', '/', '\\', '-', '_'],
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .Select(value => value.ToUpperInvariant())
-        .ToHashSet(StringComparer.Ordinal);
 
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
@@ -176,9 +189,9 @@ public sealed class LocalAgMemoryMcpRuntime : IAsyncDisposable
     private sealed class ExactLocalAuthorization(LocalAgMemoryMcpConfiguration configuration) : IAuthorizationScopeValidator
     {
         public Task<ScopeAuthorizationResult> AuthorizeAsync(ActorId actor, MemoryOperation operation, MemoryScope requestedScope, CancellationToken cancellationToken) => Task.FromResult(
-            actor == configuration.Actor && requestedScope == configuration.Scope && operation is MemoryOperation.Remember or MemoryOperation.Search
-                ? ScopeAuthorizationResult.Allowed(new AuthorizedScopeSet([new ScopeSelector(configuration.Scope)]), "codex-mcp-local-v1")
-                : ScopeAuthorizationResult.Denied(MemoryErrorCode.Unauthorized, "codex-mcp-local-v1"));
+            actor == configuration.Actor && requestedScope == configuration.Scope && operation is MemoryOperation.Remember or MemoryOperation.Search or MemoryOperation.BuildContext
+                ? ScopeAuthorizationResult.Allowed(new AuthorizedScopeSet([new ScopeSelector(configuration.Scope)]), "local-mcp-v1")
+                : ScopeAuthorizationResult.Denied(MemoryErrorCode.Unauthorized, "local-mcp-v1"));
     }
 }
 

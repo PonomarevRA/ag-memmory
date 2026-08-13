@@ -25,29 +25,23 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
     {
         if (_configuration is null || string.IsNullOrWhiteSpace(prompt)) return null;
         var runtime = GetOrCreateRuntime(_configuration);
-        var scope = new AuthorizedScopeSet([new ScopeSelector(_configuration.Scope)]);
-        var queryTerms = Tokens(prompt);
-        var now = DateTimeOffset.UtcNow;
-        var records = await runtime.Store.ListAsync(scope, cancellationToken).ConfigureAwait(false);
-        var hits = records.Where(record => record.Status == MemoryLifecycleStatus.Active &&
-                (record.ExpiresAt is null || record.ExpiresAt > now))
-            .Select(record => new { Record = record, Score = Tokens(record.CanonicalText).Count(queryTerms.Contains) })
-            .Where(item => item.Score > 0)
-            .OrderByDescending(item => item.Score)
-            .ThenByDescending(item => item.Record.UpdatedAt)
-            .Take(4)
-            .Select(item => item.Record)
-            .ToArray();
-        if (hits.Length == 0) return null;
-        var builder = new StringBuilder();
-        foreach (var hit in hits)
-        {
-            var remaining = 3_000 - builder.Length;
-            if (remaining <= 3) break;
-            var text = hit.CanonicalText;
-            builder.Append("- ").Append(text[..Math.Min(text.Length, remaining - 3)]).AppendLine();
-        }
-        return builder.Length == 0 ? null : builder.ToString();
+        var context = await runtime.Query.BuildContextAsync(new MemoryContextRequest(
+            _configuration.Actor,
+            _configuration.Scope,
+            prompt.Trim(),
+            null,
+            null,
+            SearchLimit: 8,
+            TokenBudget: 800,
+            RequireCitations: false,
+            RetrievalConfigurationVersion: ContractVersion,
+            ContextConfigurationVersion: ContractVersion,
+            ContractVersion: ContractVersion), cancellationToken).ConfigureAwait(false);
+        if (context.Error is not null || string.IsNullOrWhiteSpace(context.Content)) return null;
+        return string.Join("\n", context.Content.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.IndexOf("] ", StringComparison.Ordinal) is var marker && marker >= 0
+                ? $"- {line[(marker + 2)..]}"
+                : $"- {line}"));
     }
 
     public async Task RememberAsync(string threadId, string role, string content, CancellationToken cancellationToken)
@@ -90,8 +84,6 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
     }
 
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
-    private static IReadOnlySet<string> Tokens(string text) => text.Split([' ', '\t', '\r', '\n', '.', ',', ';', ':', '!', '?', '(', ')', '[', ']', '{', '}', '/', '\\', '-', '_'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .Select(value => value.ToUpperInvariant()).ToHashSet(StringComparer.Ordinal);
     private sealed class SystemClock : IClock { public DateTimeOffset UtcNow => DateTimeOffset.UtcNow; }
     private sealed class GuidIds : IIdGenerator { public MemoryId NewMemoryId() => new(Guid.NewGuid().ToString("D")); public CommandId NewCommandId() => new(Guid.NewGuid().ToString("D")); }
     private sealed class IdentityRedactor : IIngressRedactor { public Task<RedactionResult> RedactAsync(RedactionInput input, CancellationToken cancellationToken) => Task.FromResult(RedactionResult.Accepted(input, "local-chat-identity-v1")); }
@@ -109,7 +101,7 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
     private sealed class ExactLocalAuthorization(MemoryGraphHostConfiguration configuration) : IAuthorizationScopeValidator
     {
         public Task<ScopeAuthorizationResult> AuthorizeAsync(ActorId actor, MemoryOperation operation, MemoryScope scope, CancellationToken cancellationToken) => Task.FromResult(
-            actor == configuration.Actor && scope == configuration.Scope && operation is MemoryOperation.Remember or MemoryOperation.Search
+            actor == configuration.Actor && scope == configuration.Scope && operation is MemoryOperation.Remember or MemoryOperation.Search or MemoryOperation.BuildContext
                 ? ScopeAuthorizationResult.Allowed(new AuthorizedScopeSet([new ScopeSelector(configuration.Scope)]), "local-chat-v1")
                 : ScopeAuthorizationResult.Denied(MemoryErrorCode.Unauthorized, "local-chat-v1"));
     }

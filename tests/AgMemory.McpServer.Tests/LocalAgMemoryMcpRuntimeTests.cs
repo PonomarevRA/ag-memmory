@@ -1,4 +1,6 @@
 using AgMemory.McpServer;
+using AgMemory.Contracts;
+using AgMemory.Storage.LanceDb;
 using Xunit;
 
 namespace AgMemory.McpServer.Tests;
@@ -31,6 +33,32 @@ public sealed class LocalAgMemoryMcpRuntimeTests
         Assert.Throws<InvalidOperationException>(() => LocalAgMemoryMcpConfiguration.Create(null, "actor", "tenant"));
         Assert.Throws<InvalidOperationException>(() => LocalAgMemoryMcpConfiguration.Create("/tmp/store", null, "tenant"));
         Assert.Throws<InvalidOperationException>(() => LocalAgMemoryMcpConfiguration.Create("/tmp/store", "actor", null));
+    }
+
+    [Fact]
+    public async Task RecallUsesCoreRetrievalAndConfiguredOriginClientForProvenance()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"agmemory-mcp-{Guid.NewGuid():N}");
+        try
+        {
+            var configuration = LocalAgMemoryMcpConfiguration.Create(
+                directory, "cursor-test", "tenant-test", originClient: "cursor");
+            await using (var runtime = new LocalAgMemoryMcpRuntime(configuration))
+            {
+                await runtime.RememberAsync("The shared handoff protocol uses compact citations.", "Fact", .8d, .9d, null, default);
+                var hits = await runtime.RecallAsync("Which protocol uses citations?", 1, default);
+
+                Assert.Equal("The shared handoff protocol uses compact citations.", Assert.Single(hits).Content);
+            }
+
+            await using var store = new LanceDbMemoryStore(new(configuration.StoragePath));
+            var records = await store.ListAsync(new AuthorizedScopeSet([new ScopeSelector(configuration.Scope)]), default);
+            Assert.Equal("cursor-mcp", Assert.Single(records).Provenance.SourceSystem);
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]

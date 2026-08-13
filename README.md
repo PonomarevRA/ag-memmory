@@ -48,20 +48,44 @@ address, and send an upstream output-token cap. The SPA obtains its same-origin 
 `/api/antiforgery`; the token and cookie are never embedded in the Vite build. The browser transcript
 and navigation remain local UI state. In Development, the server records each submitted prompt and
 completed model answer as a local AgMemory event in the configured exact scope; later prompts retrieve
-up to four lexical matches as server-only context for Yuki. This is local persistence, not a production
+server-bounded, lifecycle-filtered context for Yuki. This is local persistence, not a production
 identity-to-scope policy.
 
 The Vite client is in `src/AgMemory.Web/client`. Run `npm test` and `npm run build` there for focused
 client verification; the Web project runs both automatically before its .NET build or test.
 
-### Codex ↔ AgMemory
+### Codex, Cursor and Claude ↔ AgMemory
 
-`AgMemory.McpServer` exposes that same local store to Codex over stdio MCP. The registered
-`agmemory-local` integration has only three tools: `memory_recall`, `memory_remember` and
-`memory_status`. Its storage path, actor and exact scope are fixed in the Codex MCP process
-environment — they are not tool inputs. Start a new Codex conversation after registration and ask it
-to use `memory_status`, then `memory_remember` and `memory_recall` to test durable memory. This local
-development bridge must not be used as a production authorization model.
+`AgMemory.McpServer` exposes one explicitly configured local store over stdio MCP. Every client
+registration has only three tools: `memory_recall`, `memory_remember` and `memory_status`. The storage
+path, actor and exact scope are fixed in the MCP process environment — they are not tool inputs. Set
+`AGMEMORY_CLIENT_ID` separately for each host (`codex`, `cursor`, or `claude`); it is written to the
+new memory's provenance and cannot be supplied by an agent. Omit it only for an existing Codex
+registration, where it defaults to `codex`.
+
+Use the same storage path and scope values when the clients are intentionally sharing memory; keep
+separate actor IDs per client so provenance remains attributable. Example environment block for a
+Cursor registration (the command is identical for Codex and Claude):
+
+```json
+{
+  "command": "dotnet",
+  "args": ["run", "--no-build", "--project", "/absolute/path/to/ag-memmory/src/AgMemory.McpServer/AgMemory.McpServer.csproj"],
+  "env": {
+    "AGMEMORY_STORAGE_PATH": "/absolute/path/to/shared-memory.lancedb",
+    "AGMEMORY_ACTOR_ID": "cursor-local",
+    "AGMEMORY_TENANT_ID": "local-shared",
+    "AGMEMORY_CLIENT_ID": "cursor"
+  }
+}
+```
+
+`memory_recall` remains a compatibility-safe list response, bounded to 1–10 active scoped matches;
+its ranking now uses the Core retrieval service. The local Yuki chat uses the same Core context builder
+with an 800-token budget and does not expose memory IDs or provenance to the browser. Start a new
+conversation after registration and call `memory_status`, then `memory_remember` and `memory_recall`
+to verify the shared scope. This local development bridge is not a production authorization model;
+it does not claim concurrent multi-process writer safety or semantic embeddings.
 
 ### Local Memory Status
 
