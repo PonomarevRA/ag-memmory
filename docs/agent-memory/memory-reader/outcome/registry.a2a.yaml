@@ -3,6 +3,14 @@ version: 1
 area: memory-reader
 kind: outcome
 objects:
+  - id: memory-reader.outcome.legacy-relation-schema-migration
+    title: Migrated the legacy reader relation cache schema
+    status: completed
+    summary: The known six-column relation cache gains a zero-valued shared count without losing relation rows.
+    path: legacy-relation-schema-migration.a2a.yaml
+    tags: [memory-reader, lancedb, migration, relations, standalone]
+    recorded: "2026-08-13"
+    updated: "2026-08-13"
   - id: memory-reader.outcome.explicit-wiki-relations
     title: Added metadata-backed catalog cards and explicit wiki relations
     status: superseded

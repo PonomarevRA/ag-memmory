@@ -65,7 +65,13 @@ public static class MemoryReaderEndpoint
             return CatalogJson(ToCatalogApiResponse(page, feature, filter));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch { return CatalogJson(MemoryReaderCatalogApiResponse.Unavailable); }
+        catch (Exception exception)
+        {
+            context.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger(typeof(MemoryReaderEndpoint))
+                .LogWarning(exception, "Local memory reader catalog read failed.");
+            return CatalogJson(MemoryReaderCatalogApiResponse.Unavailable);
+        }
     }
 
     public static async Task<IResult> HandleTreeAsync(

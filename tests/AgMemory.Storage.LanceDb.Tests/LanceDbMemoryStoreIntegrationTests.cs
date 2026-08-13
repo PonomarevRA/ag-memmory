@@ -357,6 +357,42 @@ public sealed class LanceDbMemoryStoreIntegrationTests
     }
 
     [Fact]
+    public async Task LegacyReaderRelationsSchema_IsMigratedWithoutLosingRelationRows()
+    {
+        var path = TemporaryPath();
+        try
+        {
+            await using (var initialized = new LanceDbMemoryStore(new(path)))
+                await initialized.GetSchemaManifestAsync();
+
+            using (var connection = new Connection())
+            {
+                await connection.Connect(path);
+                await connection.DropTable("memory_reader_wiki_relations");
+                using var legacy = await connection.CreateEmptyTable("memory_reader_wiki_relations", new CreateTableOptions { Schema = LegacyReaderRelationsSchema() });
+                await legacy.Add(BuildLegacyReaderRelationsBatch());
+            }
+
+            await using var migrated = new LanceDbMemoryStore(new(path));
+            var manifest = await migrated.GetSchemaManifestAsync();
+            var relations = Assert.Single(manifest.Tables, table => table.TableName == "memory_reader_wiki_relations");
+            Assert.Equal("shared_entity_count", relations.Fields[^1].Name);
+
+            using var verifiedConnection = new Connection();
+            await verifiedConnection.Connect(path);
+            using var verified = await verifiedConnection.OpenTable("memory_reader_wiki_relations");
+            var rows = await verified.Query().ToArrow();
+            Assert.Equal(1, rows.Length);
+            Assert.Equal("related", ((StringArray)rows.Column("kind")).GetString(0));
+            Assert.Equal("0", ((StringArray)rows.Column("shared_entity_count")).GetString(0));
+        }
+        finally
+        {
+            DeleteTemporaryPath(path);
+        }
+    }
+
+    [Fact]
     public async Task CompatiblePreManifestVectorTable_IsRegisteredWithoutRecreation()
     {
         var path = TemporaryPath();
@@ -551,6 +587,26 @@ public sealed class LanceDbMemoryStoreIntegrationTests
             .Field(new Field("id", StringType.Default, nullable: false))
             .Build();
         using var table = await connection.CreateEmptyTable("memory_records", new CreateTableOptions { Schema = schema });
+    }
+
+    private static Schema LegacyReaderRelationsSchema() => new Schema.Builder()
+        .Field(new Field("relation_key", StringType.Default, nullable: false))
+        .Field(new Field("generation_key", StringType.Default, nullable: false))
+        .Field(new Field("source_memory_id", StringType.Default, nullable: false))
+        .Field(new Field("target_memory_id", StringType.Default, nullable: false))
+        .Field(new Field("kind", StringType.Default, nullable: false))
+        .Field(new Field("label", StringType.Default, nullable: false))
+        .Build();
+
+    private static RecordBatch BuildLegacyReaderRelationsBatch()
+    {
+        var relationKey = new StringArray.Builder(); relationKey.Append("legacy-related");
+        var generationKey = new StringArray.Builder(); generationKey.Append("generation");
+        var source = new StringArray.Builder(); source.Append("source");
+        var target = new StringArray.Builder(); target.Append("target");
+        var kind = new StringArray.Builder(); kind.Append("related");
+        var label = new StringArray.Builder(); label.Append("Legacy relation");
+        return new RecordBatch(LegacyReaderRelationsSchema(), [relationKey.Build(), generationKey.Build(), source.Build(), target.Build(), kind.Build(), label.Build()], 1);
     }
 
     private static string TemporaryPath() => Path.Combine(Path.GetTempPath(), $"agmemory-lancedb-tests-{Guid.NewGuid():N}");

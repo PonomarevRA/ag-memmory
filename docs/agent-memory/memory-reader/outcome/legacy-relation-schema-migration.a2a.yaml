@@ -1,0 +1,20 @@
+schema: agent-memory-object/v1
+id: memory-reader.outcome.legacy-relation-schema-migration
+kind: outcome
+area: memory-reader
+status: completed
+title: Migrated the legacy reader relation cache schema
+summary: The known six-column relation cache gains a zero-valued shared count without losing relation rows.
+recorded: "2026-08-13"
+updated: "2026-08-13"
+tags: [memory-reader, lancedb, migration, relations, standalone]
+sources:
+  - kind: code
+    ref: src/AgMemory.Storage.LanceDb/Schema/LanceDbMemoryStore.Initialization.cs
+  - kind: test
+    ref: tests/AgMemory.Storage.LanceDb.Tests/LanceDbMemoryStoreIntegrationTests.cs
+payload:
+  change: The adapter recognizes only the released six-column relation table and adds shared_entity_count with value 0.
+  measurement: Storage integration migration test preserves a relation row and passes schema validation.
+  result: Existing local reader and graph data can open after the schema update without changing raw memory records.
+  next_action: Keep all other schema differences fail-closed and create a user-data backup before production migration.

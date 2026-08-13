@@ -22,10 +22,60 @@ public sealed partial class LanceDbMemoryStore
         await _connection.Connect(path).ConfigureAwait(false);
         await EnsureTableSchemaAsync(SchemaManifestDefinition(), cancellationToken).ConfigureAwait(false);
         foreach (var definition in CoreTableDefinitions())
+        {
+            await MigrateKnownReaderWikiRelationsSchemaAsync(definition, cancellationToken).ConfigureAwait(false);
             await EnsureTableSchemaAsync(definition, cancellationToken).ConfigureAwait(false);
+        }
         await ValidateAndRegisterVectorTablesAsync(cancellationToken).ConfigureAwait(false);
         _initialized = true;
     }
+
+    /// <summary>
+    /// Upgrades the one released reader-cache schema that predated
+    /// <c>shared_entity_count</c>. This is deliberately narrow: any schema other than the
+    /// exact six-column predecessor remains fail-closed under the normal schema policy.
+    /// </summary>
+    private async Task MigrateKnownReaderWikiRelationsSchemaAsync(
+        LanceDbTableSchemaDefinition definition,
+        CancellationToken cancellationToken)
+    {
+        if (!string.Equals(definition.TableName, ReaderWikiRelationsTable, StringComparison.Ordinal) ||
+            !await TableExistsAsync(definition.TableName, cancellationToken).ConfigureAwait(false))
+            return;
+
+        using var legacy = await OpenTableAsync(definition.TableName, cancellationToken).ConfigureAwait(false);
+        var actual = await legacy.Schema().ConfigureAwait(false);
+        if (string.Equals(LanceDbSchemaFingerprint.Create(actual), definition.Fingerprint, StringComparison.Ordinal)) return;
+        if (!string.Equals(
+                LanceDbSchemaFingerprint.Create(actual),
+                LanceDbSchemaFingerprint.Create(CreateLegacyReaderWikiRelationsSchema()),
+                StringComparison.Ordinal))
+            return;
+
+        // LanceDB applies this calculated value to every existing row, so relation data is
+        // retained and the new required field is never null.
+        await legacy.AddColumns(new Dictionary<string, string>
+        {
+            ["shared_entity_count"] = "'0'"
+        }).ConfigureAwait(false);
+        LanceDbSchemaFingerprint.RequireMatch(definition, await legacy.Schema().ConfigureAwait(false));
+
+        using var manifest = await OpenTableAsync(SchemaManifestTable, cancellationToken).ConfigureAwait(false);
+        await manifest.MergeInsert("table_name")
+            .WhenMatchedUpdateAll()
+            .WhenNotMatchedInsertAll()
+            .Execute(BuildSchemaManifestBatch([PersistedSchemaManifestRow.From(definition)]))
+            .ConfigureAwait(false);
+    }
+
+    private static Schema CreateLegacyReaderWikiRelationsSchema() => new Schema.Builder()
+        .Field(new Field("relation_key", StringType.Default, nullable: false))
+        .Field(new Field("generation_key", StringType.Default, nullable: false))
+        .Field(new Field("source_memory_id", StringType.Default, nullable: false))
+        .Field(new Field("target_memory_id", StringType.Default, nullable: false))
+        .Field(new Field("kind", StringType.Default, nullable: false))
+        .Field(new Field("label", StringType.Default, nullable: false))
+        .Build();
 
     private async Task ValidateAndRegisterVectorTablesAsync(CancellationToken cancellationToken)
     {

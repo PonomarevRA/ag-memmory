@@ -37,8 +37,11 @@ public static class MemoryStatusEndpoint
         {
             throw;
         }
-        catch
+        catch (Exception exception)
         {
+            context.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger(typeof(MemoryStatusEndpoint))
+                .LogWarning(exception, "Local memory status read failed.");
             return Json(MemoryStatusApiResponse.Unavailable);
         }
     }
