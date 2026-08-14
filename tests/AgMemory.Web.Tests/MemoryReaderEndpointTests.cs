@@ -281,7 +281,8 @@ public sealed class MemoryReaderEndpointTests
                 }, 1);
                 var staleRelations = await verifier.ReadWikiRelationsAsync(eligibility, generation!.GenerationKey, fact,
                     MemoryWikiRelationKind.Child, default);
-                Assert.Empty(staleRelations);
+                var compiledChild = Assert.Single(staleRelations);
+                Assert.Equal(outcome.Value, compiledChild.TargetMemoryId.Value);
             }
         }
         finally

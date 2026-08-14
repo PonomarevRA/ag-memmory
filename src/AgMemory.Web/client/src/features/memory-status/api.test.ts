@@ -15,10 +15,14 @@ describe('memory-status safeResponse', () => {
       expiredMemoryCount: 1,
       inactiveMemoryCount: 2,
       latestUpdateAt: '2026-08-12T12:00:00Z',
+      lastInjectHitCount: 3,
+      readerAligned: true,
       activeByType: Array.from({ length: 20 }, (_, index) => ({ type: `T${index}`, count: index }))
     });
     expect(result.status).toBe('available');
     expect(result.activeByType).toHaveLength(12);
     expect(result.totalMemoryCount).toBe(999);
+    expect(result.lastInjectHitCount).toBe(3);
+    expect(result.readerAligned).toBe(true);
   });
 });

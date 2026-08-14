@@ -1,5 +1,7 @@
 using System.Text.Json;
+using AgMemory.Web.Features.Chat;
 using AgMemory.Web.Features.MemoryGraph;
+using AgMemory.Web.Features.MemoryReader;
 
 namespace AgMemory.Web.Features.MemoryStatus;
 
@@ -12,6 +14,8 @@ public static class MemoryStatusEndpoint
         HttpContext context,
         IHostEnvironment environment,
         LocalMemoryGraphFeature feature,
+        LocalChatMemoryFeature chat,
+        LocalMemoryReaderFeature reader,
         CancellationToken cancellationToken)
     {
         context.Response.Headers.CacheControl = "no-store";
@@ -31,7 +35,9 @@ public static class MemoryStatusEndpoint
                 snapshot.ExpiredMemoryCount,
                 snapshot.InactiveMemoryCount,
                 snapshot.LatestUpdateAt,
-                snapshot.ActiveByType.Select(item => new MemoryStatusTypeCountDto(item.Type.ToString(), item.Count)).ToArray()));
+                snapshot.ActiveByType.Select(item => new MemoryStatusTypeCountDto(item.Type.ToString(), item.Count)).ToArray(),
+                chat.LastInjectHitCount,
+                reader.AlignsWith(feature)));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -49,7 +55,7 @@ public static class MemoryStatusEndpoint
     private static IResult Json(MemoryStatusApiResponse response) => new MemoryStatusJsonResult(response);
 }
 
-/// <summary>Browser-safe status response: values are aggregate counts and timestamps only.</summary>
+/// <summary>Browser-safe status response: aggregate counts, last inject hit count and reader alignment only.</summary>
 public sealed record MemoryStatusApiResponse(
     string Status,
     int TotalMemoryCount,
@@ -57,9 +63,11 @@ public sealed record MemoryStatusApiResponse(
     int ExpiredMemoryCount,
     int InactiveMemoryCount,
     DateTimeOffset? LatestUpdateAt,
-    IReadOnlyList<MemoryStatusTypeCountDto> ActiveByType)
+    IReadOnlyList<MemoryStatusTypeCountDto> ActiveByType,
+    int LastInjectHitCount,
+    bool ReaderAligned)
 {
-    public static MemoryStatusApiResponse Unavailable { get; } = new("unavailable", 0, 0, 0, 0, null, []);
+    public static MemoryStatusApiResponse Unavailable { get; } = new("unavailable", 0, 0, 0, 0, null, [], 0, false);
 }
 
 public sealed record MemoryStatusTypeCountDto(string Type, int Count);

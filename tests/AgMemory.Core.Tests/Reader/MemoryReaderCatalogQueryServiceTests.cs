@@ -75,10 +75,11 @@ public sealed class MemoryReaderCatalogQueryServiceTests
         {
             if (cursor is not null && !string.Equals(cursor.GenerationKey, Generation, StringComparison.Ordinal))
                 return Task.FromResult<MemoryReaderCatalogLeafPage?>(null);
+            var eligible = records.Where(record => record.Status == MemoryLifecycleStatus.Active).ToArray();
             var start = cursor?.NextLeafPosition ?? 0;
-            var entries = records.Skip(start).Take(MemoryReaderLimits.DocumentsPerPage).Select((record, index) => new MemoryReaderCatalogLeafEntry(
-                start + index, record.MemoryId, record.Type, string.Empty, record.UpdatedAt, record.Version)).ToArray();
-            var next = start + entries.Length < records.Count ? new MemoryReaderCatalogCursor(Generation, start + entries.Length) : null;
+            var entries = eligible.Skip(start).Take(MemoryReaderLimits.DocumentsPerPage).Select((record, index) => new MemoryReaderCatalogLeafEntry(
+                start + index, record.MemoryId, record.Type, record.CanonicalText, record.UpdatedAt, record.Version)).ToArray();
+            var next = start + entries.Length < eligible.Length ? new MemoryReaderCatalogCursor(Generation, start + entries.Length) : null;
             return Task.FromResult<MemoryReaderCatalogLeafPage?>(new(Generation, entries, next));
         }
 

@@ -2,6 +2,7 @@ using System.Text.Json;
 using AgMemory.Contracts;
 using AgMemory.Core;
 using AgMemory.Storage.LanceDb;
+using AgMemory.Web.Features.MemoryGraph;
 using Microsoft.AspNetCore.DataProtection;
 
 namespace AgMemory.Web.Features.MemoryReader;
@@ -29,6 +30,9 @@ public sealed class LocalMemoryReaderFeature : IAsyncDisposable
 
     public bool IsConfigured => _configuration is not null;
     public bool HasHomeDocument => _configuration?.HomeMemoryId is not null;
+
+    internal bool AlignsWith(LocalMemoryGraphFeature graph) =>
+        _configuration is not null && graph.MatchesExactStore(_configuration.Actor, _configuration.Scope, _configuration.StoragePath);
 
     public Task<MemoryReaderDocumentPage> ReadHomeAsync(CancellationToken cancellationToken)
     {
@@ -93,6 +97,8 @@ public sealed class LocalMemoryReaderFeature : IAsyncDisposable
         var eligibility = new MemorySearchEligibility(new AuthorizedScopeSet([new ScopeSelector(configuration.Scope)]), null, DateTimeOffset.UtcNow);
         var firstLeaf = await store.ReadReadyLeafPageAsync(eligibility, null, cancellationToken).ConfigureAwait(false);
         if (firstLeaf is null) return MemoryReaderTreePage.NotReady;
+        var types = await ReadCompiledLeafTypesAsync(store, eligibility, firstLeaf, cancellationToken).ConfigureAwait(false);
+        if (types is null) return MemoryReaderTreePage.NotReady;
         var documents = await store.ReadWikiTreeDocumentsAsync(eligibility, firstLeaf.GenerationKey, cancellationToken).ConfigureAwait(false);
         if (documents.Count == 0) return MemoryReaderTreePage.Empty;
         var childEdges = await store.ReadWikiTreeChildEdgesAsync(firstLeaf.GenerationKey, cancellationToken).ConfigureAwait(false);
@@ -100,7 +106,8 @@ public sealed class LocalMemoryReaderFeature : IAsyncDisposable
         foreach (var document in documents)
         {
             var route = await store.GetOrCreateRouteAsync(document.MemoryId, cancellationToken).ConfigureAwait(false);
-            entries.Add(new(document.MemoryId.Value, $"/memory-reader/{Uri.EscapeDataString(route.RouteKey)}", document.Title, document.Namespace, document.Type));
+            var type = types.GetValueOrDefault(document.MemoryId.Value, MemoryRecordType.Event);
+            entries.Add(new(document.MemoryId.Value, $"/memory-reader/{Uri.EscapeDataString(route.RouteKey)}", document.Title, document.Namespace, type));
         }
         return MemoryReaderTreeBuilder.Build(entries, childEdges);
     }
@@ -108,6 +115,25 @@ public sealed class LocalMemoryReaderFeature : IAsyncDisposable
     public sealed record MemoryReaderWikiRelation(string Href, string Kind, string Label, string Title, string Namespace, int SharedEntityCount);
     public sealed record MemoryReaderWikiSnapshot(MemoryWikiMetadata? Metadata, IReadOnlyList<MemoryReaderWikiRelation> Children,
         IReadOnlyList<MemoryReaderWikiRelation> Related, IReadOnlyList<MemoryReaderWikiRelation> Backlinks);
+
+    private static async Task<IReadOnlyDictionary<string, MemoryRecordType>?> ReadCompiledLeafTypesAsync(
+        LanceDbMemoryStore store,
+        MemorySearchEligibility eligibility,
+        MemoryReaderCatalogLeafPage firstLeaf,
+        CancellationToken cancellationToken)
+    {
+        var types = new Dictionary<string, MemoryRecordType>(StringComparer.Ordinal);
+        var page = firstLeaf;
+        while (true)
+        {
+            if (!string.Equals(page.GenerationKey, firstLeaf.GenerationKey, StringComparison.Ordinal)) return null;
+            foreach (var entry in page.Entries) types[entry.MemoryId.Value] = entry.Type;
+            if (page.NextCursor is null) return types;
+            var next = await store.ReadReadyLeafPageAsync(eligibility, page.NextCursor, cancellationToken).ConfigureAwait(false);
+            if (next is null) return null;
+            page = next;
+        }
+    }
 
     private static async Task<IReadOnlyList<MemoryReaderWikiRelation>> ToRelationsAsync(
         IReadOnlyList<MemoryWikiRelationRecord> relations,

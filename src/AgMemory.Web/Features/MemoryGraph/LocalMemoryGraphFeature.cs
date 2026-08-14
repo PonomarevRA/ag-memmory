@@ -33,6 +33,12 @@ public sealed class LocalMemoryGraphFeature : IAsyncDisposable
 
     public bool IsConfigured => _configuration is not null;
 
+    internal bool MatchesExactStore(ActorId actor, MemoryScope scope, string storagePath) =>
+        _configuration is not null &&
+        _configuration.Actor == actor &&
+        _configuration.Scope == scope &&
+        string.Equals(_configuration.StoragePath, storagePath, StringComparison.Ordinal);
+
     public Task<MemoryGraphSnapshot> ReadAsync(CancellationToken cancellationToken)
     {
         var configuration = _configuration ?? throw new InvalidOperationException("The local memory graph is unavailable.");

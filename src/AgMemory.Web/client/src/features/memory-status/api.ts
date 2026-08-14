@@ -11,6 +11,8 @@ export type MemoryStatusResponse = {
   inactiveMemoryCount: number;
   latestUpdateAt: string | null;
   activeByType: Array<{ type: string; count: number }>;
+  lastInjectHitCount: number;
+  readerAligned: boolean;
 };
 
 export function unavailable(): MemoryStatusResponse {
@@ -21,7 +23,9 @@ export function unavailable(): MemoryStatusResponse {
     expiredMemoryCount: 0,
     inactiveMemoryCount: 0,
     latestUpdateAt: null,
-    activeByType: []
+    activeByType: [],
+    lastInjectHitCount: 0,
+    readerAligned: false
   };
 }
 
@@ -46,7 +50,9 @@ export function safeResponse(payload: unknown): MemoryStatusResponse {
     expiredMemoryCount: safeCount(body.expiredMemoryCount),
     inactiveMemoryCount: safeCount(body.inactiveMemoryCount),
     latestUpdateAt: safeTimestamp(body.latestUpdateAt),
-    activeByType
+    activeByType,
+    lastInjectHitCount: safeCount(body.lastInjectHitCount),
+    readerAligned: body.readerAligned === true
   };
 }
 

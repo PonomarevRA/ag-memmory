@@ -75,6 +75,7 @@ public sealed partial class LanceDbMemoryStore
         MemoryWikiRelationKind kind,
         CancellationToken cancellationToken)
     {
+        if (eligibility.AuthorizedScopes.Selectors.Count != 1) return [];
         using var links = await OpenTableAsync(ReaderWikiRelationsTable, cancellationToken).ConfigureAwait(false);
         var batches = await links.Query().Where($"generation_key = {Literal(generationKey)} AND source_memory_id = {Literal(sourceMemoryId.Value)} AND kind = {Literal(kind.ToString())}")
             .Limit(kind == MemoryWikiRelationKind.Backlink ? MemoryWikiLimits.MaximumBacklinksPerPage :
@@ -89,8 +90,6 @@ public sealed partial class LanceDbMemoryStore
             var document = await ReadWikiDocumentCoreAsync(generationKey, new MemoryId(row.TargetMemoryId), cancellationToken).ConfigureAwait(false);
             if (document is null || !Enum.TryParse<MemoryWikiRelationKind>(row.Kind, out var parsed) ||
                 !long.TryParse(document.RecordVersion, CultureInfo.InvariantCulture, out var documentVersion)) continue;
-            var current = await ReadCurrentWikiTargetCoreAsync(eligibility, new MemoryId(row.TargetMemoryId), cancellationToken).ConfigureAwait(false);
-            if (current is null || current.Version != documentVersion) continue;
             if (!int.TryParse(row.SharedEntityCount, CultureInfo.InvariantCulture, out var sharedEntityCount) || sharedEntityCount < 0) continue;
             result.Add(new(parsed, new(row.TargetMemoryId), row.Label, document.Title, document.Namespace, documentVersion, sharedEntityCount));
         }

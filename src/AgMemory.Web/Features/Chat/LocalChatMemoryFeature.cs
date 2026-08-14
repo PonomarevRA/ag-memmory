@@ -12,6 +12,7 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
     private static readonly ContractVersion ContractVersion = new("local-chat-memory-v1");
     private readonly MemoryGraphHostConfiguration? _configuration;
     private readonly object _sync = new();
+    private int _lastInjectHitCount;
     private LanceDbMemoryStore? _store;
     private MemoryCommandService? _commands;
     private MemoryQueryService? _query;
@@ -20,10 +21,18 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
         _configuration = options.TryCreate(dataDirectory);
 
     public bool IsConfigured => _configuration is not null;
+    public int LastInjectHitCount
+    {
+        get { lock (_sync) return _lastInjectHitCount; }
+    }
 
     public async Task<string?> RecallAsync(string prompt, CancellationToken cancellationToken)
     {
-        if (_configuration is null || string.IsNullOrWhiteSpace(prompt)) return null;
+        if (_configuration is null || string.IsNullOrWhiteSpace(prompt))
+        {
+            SetLastInjectHitCount(0);
+            return null;
+        }
         var runtime = GetOrCreateRuntime(_configuration);
         var context = await runtime.Query.BuildContextAsync(new MemoryContextRequest(
             _configuration.Actor,
@@ -37,21 +46,35 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
             RetrievalConfigurationVersion: ContractVersion,
             ContextConfigurationVersion: ContractVersion,
             ContractVersion: ContractVersion), cancellationToken).ConfigureAwait(false);
-        if (context.Error is not null || string.IsNullOrWhiteSpace(context.Content)) return null;
-        return string.Join("\n", context.Content.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(line => line.IndexOf("] ", StringComparison.Ordinal) is var marker && marker >= 0
-                ? $"- {line[(marker + 2)..]}"
-                : $"- {line}"));
+        if (context.Error is not null)
+        {
+            SetLastInjectHitCount(0);
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(context.Content))
+        {
+            var notes = StripIds(context.Content);
+            SetLastInjectHitCount(notes.Count);
+            return notes.Count == 0 ? null : string.Join("\n", notes);
+        }
+
+        var handoff = await ReadHandoffLineAsync(runtime.Store, _configuration.Scope, cancellationToken).ConfigureAwait(false);
+        SetLastInjectHitCount(handoff is null ? 0 : 1);
+        return handoff;
     }
 
-    public async Task RememberAsync(string threadId, string role, string content, CancellationToken cancellationToken)
+    public async Task RememberAsync(string threadId, string role, string content, CancellationToken cancellationToken) =>
+        await RememberAsync(threadId, role, content, MemoryRecordType.Event, cancellationToken).ConfigureAwait(false);
+
+    public async Task RememberAsync(string threadId, string role, string content, MemoryRecordType type, CancellationToken cancellationToken)
     {
         if (_configuration is null || string.IsNullOrWhiteSpace(content)) return;
         var canonical = $"{(role == "assistant" ? "assistant" : "user")}: {content.Trim()}";
-        var idempotencyKey = Hash($"{threadId}|{canonical}");
+        var idempotencyKey = Hash($"{threadId}|{type}|{canonical}");
         var command = new RememberCommand(new(new CommandId(Guid.NewGuid().ToString("D")), idempotencyKey,
             _configuration.Actor, new CorrelationId(Guid.NewGuid().ToString("D")), _configuration.Scope, ContractVersion), new(
-            MemoryRecordType.Event, canonical, "Local Yuki chat", .6d, .8d, [$"thread:{threadId}"],
+            type, canonical, "Local Yuki chat", .6d, .8d, [$"thread:{threadId}"],
             new MemoryProvenance("local-yuki-chat", null, null, null, null, threadId, null,
                 [new SourceEvidenceRef($"chat:{threadId}:{idempotencyKey}")]), EmbeddingMode: EmbeddingMode.Required));
         var result = await GetOrCreateRuntime(_configuration).Commands.RememberAsync(command, cancellationToken).ConfigureAwait(false);
@@ -81,6 +104,44 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
             _query = new MemoryQueryService(_store, authorization, _store, _store, null, policy, clock, options);
             return (_store, _commands, _query);
         }
+    }
+
+    private void SetLastInjectHitCount(int value)
+    {
+        lock (_sync) _lastInjectHitCount = value;
+    }
+
+    private static List<string> StripIds(string content) =>
+        content.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.IndexOf("] ", StringComparison.Ordinal) is var marker && marker >= 0
+                ? $"- {line[(marker + 2)..]}"
+                : $"- {line}")
+            .ToList();
+
+    private static async Task<string?> ReadHandoffLineAsync(
+        LanceDbMemoryStore store,
+        MemoryScope scope,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var records = (await store.ListAsync(new AuthorizedScopeSet([new ScopeSelector(scope)]), cancellationToken).ConfigureAwait(false))
+            .Where(record => record.Status == MemoryLifecycleStatus.Active && (record.ExpiresAt is null || record.ExpiresAt > now))
+            .ToArray();
+        var handoff = records
+            .Where(record => record.Type == MemoryRecordType.Summary)
+            .OrderByDescending(record => record.UpdatedAt)
+            .ThenBy(record => record.Id.Value, StringComparer.Ordinal)
+            .FirstOrDefault()
+            ?? records
+                .Where(record => record.Type == MemoryRecordType.Event)
+                .OrderByDescending(record => record.UpdatedAt)
+                .ThenBy(record => record.Id.Value, StringComparer.Ordinal)
+                .FirstOrDefault();
+        if (handoff is null) return null;
+        var text = handoff.CanonicalText.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        if (text.Length == 0) return null;
+        if (text.Length > 3200) text = text[..3200];
+        return $"- {text}";
     }
 
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();

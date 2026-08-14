@@ -36,10 +36,7 @@ public sealed partial class LanceDbMemoryStore
             {
                 if (result.Count == MemoryReaderLimits.MaximumTreeNodes) break;
                 if (!long.TryParse(row.RecordVersion, CultureInfo.InvariantCulture, out var version) || version <= 0) continue;
-                var memoryId = new MemoryId(row.MemoryId);
-                var current = await ReadCurrentWikiTargetCoreAsync(eligibility, memoryId, cancellationToken).ConfigureAwait(false);
-                if (current is null || current.Version != version) continue;
-                result.Add(new(memoryId, row.Title, row.Namespace, current.Type, version));
+                result.Add(new(new MemoryId(row.MemoryId), row.Title, row.Namespace, version));
             }
             return result;
         }
@@ -80,7 +77,6 @@ public sealed record MemoryReaderWikiTreeDocument(
     MemoryId MemoryId,
     string Title,
     string Namespace,
-    MemoryRecordType Type,
     long Version);
 
 public sealed record MemoryReaderWikiTreeChildEdge(

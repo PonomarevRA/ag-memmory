@@ -3,7 +3,7 @@ using AgMemory.Contracts;
 
 namespace AgMemory.Core;
 
-/// <summary>Builds browser-safe pages from immutable catalog leaves and rechecks every leaf before disclosure.</summary>
+/// <summary>Builds browser-safe pages from immutable catalog leaves and compiled wiki metadata.</summary>
 public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryService
 {
     private readonly IMemoryReaderCatalogSource _catalog;
@@ -60,13 +60,11 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
 
                 foreach (var leaf in leaves.Entries)
                 {
-                    var record = await _reader.ReadByIdAsync(eligibility, leaf.MemoryId, cancellationToken).ConfigureAwait(false);
-                    if (record is null || record.Version != leaf.Version || !IsEligible(record, eligibility)) continue;
-                    var document = await DescribeAsync(record, cancellationToken).ConfigureAwait(false);
+                    var document = await DescribeLeafAsync(eligibility, leaf, cancellationToken).ConfigureAwait(false);
                     if (!Matches(document, request.Filter)) continue;
-                    var route = await _reader.GetOrCreateRouteAsync(record.MemoryId, cancellationToken).ConfigureAwait(false);
-                    documents.Add(new($"/memory-reader/{Uri.EscapeDataString(route.RouteKey)}", record.Type, document.Title,
-                        document.Namespace, document.Tags, Preview(record.CanonicalText), record.UpdatedAt));
+                    var route = await _reader.GetOrCreateRouteAsync(leaf.MemoryId, cancellationToken).ConfigureAwait(false);
+                    documents.Add(new($"/memory-reader/{Uri.EscapeDataString(route.RouteKey)}", leaf.Type, document.Title,
+                        document.Namespace, document.Tags, Preview(leaf.Preview), leaf.UpdatedAt));
                     if (documents.Count == MemoryReaderLimits.DocumentsPerPage)
                     {
                         next = new(leaves.GenerationKey, leaf.Position + 1);
@@ -120,11 +118,6 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
 
     private DateTimeOffset UtcNow() => _clock.UtcNow.Offset == TimeSpan.Zero ? _clock.UtcNow : _clock.UtcNow.ToUniversalTime();
 
-    private static bool IsEligible(MemoryReaderSourceRecord record, MemorySearchEligibility eligibility) =>
-        eligibility.AuthorizedScopes.Contains(record.Scope) &&
-        record.Status == MemoryLifecycleStatus.Active &&
-        (record.ExpiresAt is null || record.ExpiresAt > eligibility.AsOfUtc);
-
     private async Task<FacetSet?> ReadFacetsAsync(
         MemorySearchEligibility eligibility,
         MemoryReaderCatalogLeafPage firstLeaf,
@@ -137,9 +130,7 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
         {
             foreach (var leaf in leaves.Entries)
             {
-                var record = await _reader.ReadByIdAsync(eligibility, leaf.MemoryId, cancellationToken).ConfigureAwait(false);
-                if (record is null || record.Version != leaf.Version || !IsEligible(record, eligibility)) continue;
-                var document = await DescribeAsync(record, cancellationToken).ConfigureAwait(false);
+                var document = await DescribeLeafAsync(eligibility, leaf, cancellationToken).ConfigureAwait(false);
                 foreach (var @namespace in NamespaceHierarchy(document.Namespace))
                     namespaces[@namespace] = namespaces.GetValueOrDefault(@namespace) + 1;
                 foreach (var tag in document.Tags.Select(TagFacet.FromTag)) AddBoundedTag(tags, tag);
@@ -201,13 +192,17 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
         return value[4..].All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
     }
 
-    private async Task<WikiDocument> DescribeAsync(MemoryReaderSourceRecord record, CancellationToken cancellationToken)
+    private async Task<WikiDocument> DescribeLeafAsync(
+        MemorySearchEligibility eligibility,
+        MemoryReaderCatalogLeafEntry leaf,
+        CancellationToken cancellationToken)
     {
+        var scope = eligibility.AuthorizedScopes.Selectors[0].Scope;
         var metadata = _metadata is null
             ? null
-            : await _metadata.ReadWikiMetadataAsync(record.Scope, record.MemoryId, record.Version, cancellationToken).ConfigureAwait(false);
+            : await _metadata.ReadWikiMetadataAsync(scope, leaf.MemoryId, leaf.Version, cancellationToken).ConfigureAwait(false);
         return new(
-            metadata?.Title ?? FallbackTitle(record.CanonicalText),
+            metadata?.Title ?? FallbackTitle(leaf.Preview),
             metadata?.Namespace ?? "inbox",
             metadata?.Tags ?? []);
     }

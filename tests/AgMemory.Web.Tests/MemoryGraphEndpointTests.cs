@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json;
 using AgMemory.Web.Features.Chat;
 using AgMemory.Web.Features.MemoryGraph;
+using AgMemory.Web.Features.MemoryReader;
 using AgMemory.Web.Features.MemoryStatus;
 using AgMemory.Web.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -243,18 +244,66 @@ public sealed class MemoryGraphEndpointTests
             await using var feature = new LocalMemoryGraphFeature(new MemoryGraphHostOptions(), root);
             var context = Context(IPAddress.Loopback);
 
+            await using var chat = new LocalChatMemoryFeature(new MemoryGraphHostOptions(), root);
+            await using var reader = new LocalMemoryReaderFeature(new MemoryReaderHostOptions(), root, Provider(root));
             var result = await MemoryStatusEndpoint.HandleAsync(
                 context,
                 new TestHostEnvironment(isDevelopment: true, root),
                 feature,
+                chat,
+                reader,
                 default);
             var response = await ExecuteStatusAsync(result, context);
 
             Assert.Equal("no-store", context.Response.Headers.CacheControl.ToString());
             Assert.Equal("unavailable", response.Status);
             Assert.Equal(0, response.TotalMemoryCount);
+            Assert.Equal(0, response.LastInjectHitCount);
+            Assert.False(response.ReaderAligned);
             Assert.Empty(response.ActiveByType);
             Assert.False(Directory.Exists(root));
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public async Task StatusEndpoint_ReportsInjectCountAndReaderAlignmentWithoutLeakingStoreIdentity()
+    {
+        var root = TemporaryPath();
+        try
+        {
+            Directory.CreateDirectory(root);
+            var options = ConfiguredOptions();
+            await using var chat = new LocalChatMemoryFeature(options, root);
+            await chat.RememberAsync("status-thread", "user", "alpha-beta-gamma unique marker", default);
+            await chat.RecallAsync("qqqqzzzzmmmm unmatched query tokens", default);
+            await using var feature = new LocalMemoryGraphFeature(options, root);
+            await using var alignedReader = new LocalMemoryReaderFeature(AlignedReaderOptions(options), root, Provider(root));
+            await using var driftedReader = new LocalMemoryReaderFeature(new MemoryReaderHostOptions
+            {
+                Enabled = true,
+                StoragePath = options.StoragePath,
+                ActorId = options.ActorId,
+                Scope = new MemoryReaderScopeOptions { TenantId = "other-tenant" }
+            }, root, Provider(root));
+            var context = Context(IPAddress.Loopback);
+
+            var aligned = await ExecuteStatusAsync(await MemoryStatusEndpoint.HandleAsync(
+                context, new TestHostEnvironment(isDevelopment: true, root), feature, chat, alignedReader, default), context);
+            context.Response.Body = new MemoryStream();
+            var drifted = await ExecuteStatusAsync(await MemoryStatusEndpoint.HandleAsync(
+                context, new TestHostEnvironment(isDevelopment: true, root), feature, chat, driftedReader, default), context);
+
+            Assert.Equal("available", aligned.Status);
+            Assert.Equal(1, aligned.LastInjectHitCount);
+            Assert.True(aligned.ReaderAligned);
+            Assert.False(drifted.ReaderAligned);
+            Assert.DoesNotContain("Actor", typeof(MemoryStatusApiResponse).GetProperties().Select(property => property.Name));
+            Assert.DoesNotContain("Scope", typeof(MemoryStatusApiResponse).GetProperties().Select(property => property.Name));
+            Assert.DoesNotContain("StoragePath", typeof(MemoryStatusApiResponse).GetProperties().Select(property => property.Name));
         }
         finally
         {
@@ -407,6 +456,21 @@ public sealed class MemoryGraphEndpointTests
 
     private static IDataProtectionProvider Provider(string root) =>
         DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(root, "data-protection")));
+
+    private static MemoryReaderHostOptions AlignedReaderOptions(MemoryGraphHostOptions options) => new()
+    {
+        Enabled = true,
+        StoragePath = options.StoragePath,
+        ActorId = options.ActorId,
+        Scope = new MemoryReaderScopeOptions
+        {
+            TenantId = options.Scope?.TenantId,
+            ProjectId = options.Scope?.ProjectId,
+            WorkspaceId = options.Scope?.WorkspaceId,
+            ChatId = options.Scope?.ChatId,
+            RunId = options.Scope?.RunId
+        }
+    };
 
     private static MemoryGraphHostOptions ConfiguredOptions() => new()
         {
