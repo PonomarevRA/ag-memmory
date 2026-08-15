@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>AgMemory.Web</RootNamespace>
     <Description>Vite SPA host for AgMemory.</Description>
+    <Version>$(AgMemoryProductVersion)</Version>
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>

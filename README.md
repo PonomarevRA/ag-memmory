@@ -126,8 +126,11 @@ Build a self-contained `.app` bundle for Apple Silicon (or pass `osx-x64` for In
 open artifacts/macos/osx-arm64/AgMemory.app
 ```
 
-The bundle starts a loopback-only host and opens the UI in the default browser. Drag the generated
-`AgMemory.app` to `/Applications` to install it; the accompanying ZIP is suitable for transfer.
+The bundle starts a loopback-only host and opens the UI in the default browser. The header shows the
+product version from `AgMemoryProductVersion` in `Directory.Build.props` (override with
+`AGMEMORY_VERSION` when packaging). Drag the generated
+`AgMemory.app` to `/Applications` to install it; `open artifacts/.../AgMemory.app` runs the freshly
+built copy and does not replace `/Applications/AgMemory.app`. The accompanying ZIP is suitable for transfer.
 It is ad-hoc signed for local use. External distribution still requires an Apple Developer certificate
 and notarization.
 

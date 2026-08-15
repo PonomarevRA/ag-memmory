@@ -94,6 +94,7 @@ p { margin-bottom: var(--space-4); }
 .brand { display: inline-flex; gap: var(--space-2); align-items: center; color: var(--text); font-weight: 800; text-decoration: none; }
 .brand-mark { display: inline-grid; width: 2rem; height: 2rem; overflow: hidden; border-radius: 0.625rem; }
 .brand-mark img { display: block; width: 100%; height: 100%; }
+.brand-version { display: inline-flex; align-items: center; min-height: 1.5rem; padding: 0.1rem 0.45rem; border: 1px solid var(--border); border-radius: 999px; color: var(--text-muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em; }
 .primary-nav { display: flex; gap: var(--space-1); align-items: center; }
 .primary-nav a { padding: var(--space-2) var(--space-3); border-radius: var(--radius-control); color: var(--text-muted); font-size: 0.9375rem; font-weight: 650; text-decoration: none; }
 .primary-nav a.active, .primary-nav a:hover { color: var(--text); background: var(--surface-muted); }

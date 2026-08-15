@@ -5,6 +5,8 @@
     <RootNamespace>AgMemory.McpServer</RootNamespace>
     <Description>Local stdio MCP server for AgMemory.</Description>
     <IsPackable>false</IsPackable>
+    <Version>$(AgMemoryProductVersion)</Version>
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Apache.Arrow" />

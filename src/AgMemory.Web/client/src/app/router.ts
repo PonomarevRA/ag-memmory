@@ -1,10 +1,11 @@
-import { matchRoute, type Route } from './routes.js';
+import { matchRoute } from './routes.js';
 import { shell } from './shell.js';
 import { renderPage } from '../pages/index.js';
 import { mountMemoryGraphPage } from '../features/memory-graph/page.js';
 import { dispose as disposeMemoryGraph } from '../features/memory-graph/page-controller.js';
 import { dispose as disposeChat } from '../features/chat/chat-stream.js';
 import { trackVisit } from '../features/navigation/index.js';
+import { loadAppVersion } from '../features/app-version/api.js';
 
 let app: HTMLElement;
 export function startRouter(target: HTMLElement): void {
@@ -23,7 +24,8 @@ export async function render(): Promise<void> {
   disposeMemoryGraph();
   disposeChat();
   const route = matchRoute(); document.title = route.title;
-  app.innerHTML = shell(await renderPage(route), route.path);
+  const version = await loadAppVersion();
+  app.innerHTML = shell(await renderPage(route), route.path, version);
   if (route.name === 'graph') mountMemoryGraphPage();
   app.querySelector<HTMLElement>('main')?.focus();
   trackVisit(route.path, route.title);

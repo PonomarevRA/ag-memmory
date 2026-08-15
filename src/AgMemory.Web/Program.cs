@@ -1,4 +1,5 @@
 using AgMemory.Web.Features.Antiforgery;
+using AgMemory.Web.Features.AppVersion;
 using AgMemory.Web.Features.Chat;
 using AgMemory.Web.Features.MemoryGraph;
 using AgMemory.Web.Features.MemoryReader;
@@ -79,6 +80,7 @@ app.UseRateLimiter();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapGet(AntiforgeryEndpoint.Route, AntiforgeryEndpoint.HandleAsync);
+app.MapGet(AppVersionEndpoint.Route, AppVersionEndpoint.Handle);
 app.MapPost(ChatEndpoint.Route, ChatEndpoint.HandleAsync)
     .RequireRateLimiting(ChatEndpoint.RateLimitPolicy);
 app.MapGet(MemoryGraphEndpoint.Route, (HttpContext context, string? continuation, IHostEnvironment environment,

@@ -3,7 +3,14 @@ set -euo pipefail
 
 task_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 runtime_id=${1:-osx-arm64}
-version=${AGMEMORY_VERSION:-1.0.0}
+read_product_version() {
+  sed -n 's/.*<AgMemoryProductVersion>\([^<]*\)<\/AgMemoryProductVersion>.*/\1/p' "$task_root/Directory.Build.props" | head -n 1
+}
+version=${AGMEMORY_VERSION:-$(read_product_version)}
+if [[ -z "$version" ]]; then
+  echo "Unable to resolve AgMemoryProductVersion. Set AGMEMORY_VERSION or Directory.Build.props." >&2
+  exit 1
+fi
 output_root="$task_root/artifacts/macos/$runtime_id"
 publish_root="$output_root/publish"
 app_bundle="$output_root/AgMemory.app"
@@ -75,6 +82,7 @@ dotnet publish "$task_root/src/AgMemory.Web/AgMemory.Web.csproj" \
   --no-restore \
   -p:PublishSingleFile=false \
   -p:PublishTrimmed=false \
+  -p:Version="$version" \
   --output "$publish_root"
 
 ditto "$publish_root" "$app_bundle/Contents/MacOS"

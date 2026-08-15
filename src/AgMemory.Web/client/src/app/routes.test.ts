@@ -24,4 +24,12 @@ describe('SPA routes and shell', () => {
     expect(root.querySelector('#menu-toggle')?.getAttribute('aria-controls')).toBe('primary-navigation');
     expect(root.querySelector('#primary-navigation .primary-nav__close')).not.toBeNull();
   });
+
+  it('renders the product version in the header', () => {
+    const root = document.createElement('div');
+    root.innerHTML = shell('<h1>Home</h1>', '/', { version: '1.1.0', informationalVersion: '1.1.0+abc' });
+    const badge = root.querySelector('.brand-version');
+    expect(badge?.textContent).toBe('1.1.0');
+    expect(badge?.getAttribute('title')).toBe('1.1.0+abc');
+  });
 });
