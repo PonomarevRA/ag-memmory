@@ -1,0 +1,20 @@
+schema: agent-memory-object/v1
+id: memory-reader.outcome.document-tree-rail
+kind: outcome
+area: memory-reader
+status: completed
+title: Kept the Wiki tree beside opened documents
+summary: Direct card navigation retains the paged left tree and highlights the open document.
+recorded: "2026-08-21"
+updated: "2026-08-21"
+tags: [memory-reader, wiki, navigation, tree, ui]
+sources:
+  - kind: code
+    ref: src/AgMemory.Web/client/src/features/memory-reader/page-controller.ts
+  - kind: test
+    ref: src/AgMemory.Web/client/src/features/memory-reader/page-controller.test.ts
+payload:
+  change: Document mode retains the paged tree rail, and card links load details into the existing right pane.
+  measurement: Client tests 27 passed and Vite build completed.
+  result: Card selection does not rerender the SPA or request the tree again; the selected tree link is marked active.
+  next_action: Keep Wiki-detail navigation inside the reader controller and retain the active-route marker.

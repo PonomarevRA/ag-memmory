@@ -51,3 +51,11 @@ objects:
     tags: [memory-reader, wiki, tree, tags, search, pagination]
     recorded: "2026-08-21"
     updated: "2026-08-21"
+  - id: memory-reader.outcome.document-tree-rail
+    title: Kept the Wiki tree beside opened documents
+    status: completed
+    summary: Direct card navigation retains the paged left tree and highlights the open document.
+    path: document-tree-rail.a2a.yaml
+    tags: [memory-reader, wiki, navigation, tree, ui]
+    recorded: "2026-08-21"
+    updated: "2026-08-21"
