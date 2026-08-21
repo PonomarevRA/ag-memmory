@@ -43,3 +43,11 @@ objects:
     tags: [memory-reader, catalog, graph, lancedb, standalone]
     recorded: "2026-08-10"
     updated: "2026-08-10"
+  - id: memory-reader.outcome.progressive-wiki-reader
+    title: Delivered progressive wiki tree, tags and search
+    status: completed
+    summary: Wiki now has paged tree and tag reads, search-bound catalog cursors, visible weights and internal UI primitives.
+    path: progressive-wiki-reader.a2a.yaml
+    tags: [memory-reader, wiki, tree, tags, search, pagination]
+    recorded: "2026-08-21"
+    updated: "2026-08-21"

@@ -10,7 +10,9 @@ public static class MemoryReaderEndpoint
     public const string CatalogRoute = "/api/memory-reader";
     public const string HomeRoute = "/api/memory-reader/home";
     public const string TreeRoute = "/api/memory-reader/tree";
+    public const string TagRoute = "/api/memory-reader/tags";
     public const string DocumentRoute = "/api/memory-reader/{routeKey}";
+
 
     public static async Task<IResult> HandleHomeAsync(
         HttpContext context,
@@ -41,6 +43,7 @@ public static class MemoryReaderEndpoint
         string? continuation,
         string? @namespace,
         string? tag,
+        string? search,
         IHostEnvironment environment,
         LocalMemoryReaderFeature feature,
         CancellationToken cancellationToken)
@@ -52,10 +55,10 @@ public static class MemoryReaderEndpoint
         MemoryReaderCatalogFilter filter;
         if (!string.IsNullOrWhiteSpace(continuation))
         {
-            if (!feature.TryUnprotectCatalogContinuation(continuation, @namespace, tag, out cursor, out filter))
+            if (!feature.TryUnprotectCatalogContinuation(continuation, @namespace, tag, search, out cursor, out filter))
                 return CatalogJson(MemoryReaderCatalogApiResponse.Stale);
         }
-        else if (!MemoryReaderCatalogQueryService.TryNormalizeFilter(@namespace, tag, out filter))
+        else if (!MemoryReaderCatalogQueryService.TryNormalizeFilter(@namespace, tag, search, out filter))
         {
             return CatalogJson(MemoryReaderCatalogApiResponse.Stale);
         }
@@ -74,8 +77,28 @@ public static class MemoryReaderEndpoint
         }
     }
 
+    public static async Task<IResult> HandleTagsAsync(HttpContext context, string? continuation, IHostEnvironment environment, LocalMemoryReaderFeature feature, CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (!MemoryReaderAccessPolicy.AllowsStoreAccess(feature.IsConfigured, environment.IsDevelopment(), context.Connection.RemoteIpAddress)) return TagJson(MemoryReaderTagApiResponse.Unavailable);
+        var start = 0;
+        if (!string.IsNullOrWhiteSpace(continuation) && !feature.TryUnprotectTagContinuation(continuation, out start)) return TagJson(MemoryReaderTagApiResponse.Unavailable);
+        try
+        {
+            var page = await feature.BrowseAsync(null, MemoryReaderCatalogFilter.Empty, cancellationToken).ConfigureAwait(false);
+            if (page.State != MemoryReaderCatalogState.Available) return TagJson(MemoryReaderTagApiResponse.Unavailable);
+            const int size = 12;
+            var tags = page.Tags.Skip(start).Take(size).Select(tag => new MemoryReaderCatalogFacetDto(tag.Locator, tag.Label, tag.Count)).ToArray();
+            var next = start + tags.Length < page.Tags.Count ? feature.ProtectTagContinuation(start + tags.Length) : null;
+            return TagJson(new("available", tags, next));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch { return TagJson(MemoryReaderTagApiResponse.Unavailable); }
+    }
+
     public static async Task<IResult> HandleTreeAsync(
         HttpContext context,
+        string? continuation,
         IHostEnvironment environment,
         LocalMemoryReaderFeature feature,
         CancellationToken cancellationToken)
@@ -83,10 +106,13 @@ public static class MemoryReaderEndpoint
         context.Response.Headers.CacheControl = "no-store";
         if (!MemoryReaderAccessPolicy.AllowsStoreAccess(feature.IsConfigured, environment.IsDevelopment(), context.Connection.RemoteIpAddress))
             return TreeJson(MemoryReaderTreeApiResponse.Unavailable);
+        if (!string.IsNullOrWhiteSpace(continuation) && !feature.TryUnprotectTreeContinuation(continuation, out _))
+            return TreeJson(MemoryReaderTreeApiResponse.Unavailable);
         try
         {
             var page = await feature.ReadTreeAsync(cancellationToken).ConfigureAwait(false);
-            return TreeJson(ToTreeApiResponse(page));
+            var start = string.IsNullOrWhiteSpace(continuation) ? 0 : feature.TryUnprotectTreeContinuation(continuation, out var position) ? position : 0;
+            return TreeJson(ToTreeApiResponse(page, feature, start));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch { return TreeJson(MemoryReaderTreeApiResponse.Unavailable); }
@@ -134,13 +160,37 @@ public static class MemoryReaderEndpoint
     private static IResult Json(MemoryReaderApiResponse response) => new MemoryReaderJsonResult(response);
     private static IResult CatalogJson(MemoryReaderCatalogApiResponse response) => new MemoryReaderCatalogJsonResult(response);
     private static IResult TreeJson(MemoryReaderTreeApiResponse response) => new MemoryReaderTreeJsonResult(response);
+    private static IResult TagJson(MemoryReaderTagApiResponse response) => new MemoryReaderTagJsonResult(response);
 
-    private static MemoryReaderTreeApiResponse ToTreeApiResponse(MemoryReaderTreePage page) => page.Status switch
+    private static MemoryReaderTreeApiResponse ToTreeApiResponse(MemoryReaderTreePage page, LocalMemoryReaderFeature feature, int start = 0) => page.Status switch
     {
-        "available" => new("available", page.Roots.Select(ToTreeNodeDto).ToArray()),
+        "available" => TreeSlice(page, feature, start),
         "catalog-not-ready" => MemoryReaderTreeApiResponse.NotReady,
         _ => MemoryReaderTreeApiResponse.Unavailable
     };
+
+    private static MemoryReaderTreeApiResponse TreeSlice(MemoryReaderTreePage page, LocalMemoryReaderFeature feature, int start)
+    {
+        var flattened = Flatten(page.Roots).ToArray();
+        const int size = 32;
+        // A continuation is a flat reader list: returning descendants here would duplicate them on later portions.
+        var roots = flattened.Skip(start).Take(size).Select(node => new MemoryReaderTreeNodeDto(
+            node.Node.Kind, node.Node.Label, node.Node.Locator, node.Node.Href, node.Node.LinkWeight, node.Node.ItemCount, [], node.Key, node.ParentKey, node.Depth)).ToArray();
+        var next = start + roots.Length < flattened.Length ? feature.ProtectTreeContinuation(start + roots.Length) : null;
+        return new("available", roots, next);
+    }
+
+    private static IEnumerable<(MemoryReaderTreeNode Node, string Key, string? ParentKey, int Depth)> Flatten(IEnumerable<MemoryReaderTreeNode> nodes, string? parentKey = null, int depth = 0)
+    {
+        var index = 0;
+        foreach (var node in nodes)
+        {
+            var key = parentKey is null ? $"n{index}" : $"{parentKey}.{index}";
+            yield return (node, key, parentKey, depth);
+            foreach (var child in Flatten(node.Children, key, depth + 1)) yield return child;
+            index++;
+        }
+    }
 
     private static MemoryReaderTreeNodeDto ToTreeNodeDto(MemoryReaderTreeNode node) =>
         new(node.Kind, node.Label, node.Locator, node.Href, node.LinkWeight, node.ItemCount, node.Children.Select(ToTreeNodeDto).ToArray());
@@ -225,12 +275,20 @@ public sealed record MemoryReaderTreeNodeDto(
     string? Href,
     int? LinkWeight,
     int? ItemCount,
-    IReadOnlyList<MemoryReaderTreeNodeDto> Children);
+    IReadOnlyList<MemoryReaderTreeNodeDto> Children,
+    string? NodeKey = null,
+    string? ParentKey = null,
+    int Depth = 0);
 
-public sealed record MemoryReaderTreeApiResponse(string Status, IReadOnlyList<MemoryReaderTreeNodeDto> Roots)
+public sealed record MemoryReaderTreeApiResponse(string Status, IReadOnlyList<MemoryReaderTreeNodeDto> Roots, string? NextToken = null)
 {
     public static MemoryReaderTreeApiResponse Unavailable { get; } = new("unavailable", []);
     public static MemoryReaderTreeApiResponse NotReady { get; } = new("catalog-not-ready", []);
+}
+
+public sealed record MemoryReaderTagApiResponse(string Status, IReadOnlyList<MemoryReaderCatalogFacetDto> Tags, string? NextToken)
+{
+    public static MemoryReaderTagApiResponse Unavailable { get; } = new("unavailable", [], null);
 }
 
 public sealed record MemoryReaderCatalogApiResponse(
@@ -290,5 +348,15 @@ internal sealed class MemoryReaderTreeJsonResult(MemoryReaderTreeApiResponse res
         context.Response.ContentType = "application/json; charset=utf-8";
         await JsonSerializer.SerializeAsync(context.Response.Body, response, response.GetType(), JsonOptions,
             context.RequestAborted).ConfigureAwait(false);
+    }
+}
+
+internal sealed class MemoryReaderTagJsonResult(MemoryReaderTagApiResponse response) : IResult
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    public async Task ExecuteAsync(HttpContext context)
+    {
+        context.Response.ContentType = "application/json; charset=utf-8";
+        await JsonSerializer.SerializeAsync(context.Response.Body, response, response.GetType(), JsonOptions, context.RequestAborted).ConfigureAwait(false);
     }
 }

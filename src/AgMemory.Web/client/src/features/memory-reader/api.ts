@@ -41,11 +41,12 @@ function safeFacet(value: unknown, isValidLocator: (locator: string) => boolean)
   return locator && isValidLocator(locator) && label && count !== null ? { locator, label, count } : null;
 }
 
-export async function loadCatalog(token?: string | null, namespaceValue?: string | null, tag?: string | null): Promise<CatalogResponse> {
+export async function loadCatalog(token?: string | null, namespaceValue?: string | null, tag?: string | null, search?: string | null): Promise<CatalogResponse> {
   const parameters = new URLSearchParams();
   if (typeof token === 'string' && token.length > 0) parameters.set('continuation', token);
   if (typeof namespaceValue === 'string' && namespaceValue.length > 0) parameters.set('namespace', namespaceValue);
   if (typeof tag === 'string' && tag.length > 0) parameters.set('tag', tag);
+  if (typeof search === 'string' && search.length > 0) parameters.set('search', search);
   const route = parameters.size > 0 ? `${HOME_ROUTE}?${parameters.toString()}` : HOME_ROUTE;
   const payload = await fetchJson<Record<string, unknown>>(route);
   if (!payload || !CATALOG_STATUS.has(String(payload.status))) return catalogUnavailable();
@@ -83,10 +84,13 @@ export type TreeNode = {
   linkWeight: number | null;
   itemCount: number | null;
   children: TreeNode[];
+  nodeKey: string | null;
+  parentKey: string | null;
+  depth: number;
 };
 
-function treeUnavailable(status = 'unavailable'): { status: string; roots: TreeNode[] } {
-  return { status, roots: [] };
+function treeUnavailable(status = 'unavailable'): { status: string; roots: TreeNode[]; nextToken: string | null } {
+  return { status, roots: [], nextToken: null };
 }
 
 function safeTreeNode(value: unknown, depth: number): TreeNode | null {
@@ -110,13 +114,22 @@ function safeTreeNode(value: unknown, depth: number): TreeNode | null {
   const children = Array.isArray(row?.children)
     ? row.children.map(child => safeTreeNode(child, depth + 1)).filter((child): child is TreeNode => child !== null).slice(0, 256)
     : [];
-  return { kind, label, locator, href, linkWeight, itemCount, children };
+  const nodeKey = safeText(row?.nodeKey, 512);
+  const parentKey = row?.parentKey === null ? null : safeText(row?.parentKey, 512);
+  const nodeDepth = Number.isSafeInteger(row?.depth) && (row.depth as number) >= 0 && (row.depth as number) <= 8 ? row.depth as number : depth;
+  return { kind, label, locator, href, linkWeight, itemCount, children, nodeKey, parentKey, depth: nodeDepth };
 }
 
-export async function loadTree(): Promise<{ status: string; roots: TreeNode[] }> {
-  const payload = await fetchJson<Record<string, unknown>>(TREE_ROUTE);
+export async function loadTree(token?: string | null): Promise<{ status: string; roots: TreeNode[]; nextToken: string | null }> {
+  const payload = await fetchJson<Record<string, unknown>>(token ? `${TREE_ROUTE}?continuation=${encodeURIComponent(token)}` : TREE_ROUTE);
   if (!payload || !TREE_STATUS.has(String(payload.status))) return treeUnavailable();
   if (payload.status !== 'available' || !Array.isArray(payload.roots)) return treeUnavailable(String(payload.status));
   const roots = payload.roots.map(node => safeTreeNode(node, 0)).filter((node): node is TreeNode => node !== null).slice(0, 256);
-  return { status: 'available', roots };
+  return { status: 'available', roots, nextToken: payload.nextToken === null ? null : safeText(payload.nextToken, 4096) };
+}
+
+export async function loadTags(token?: string | null): Promise<{ status: string; tags: CatalogResponse['tags']; nextToken: string | null }> {
+  const payload = await fetchJson<Record<string, unknown>>(token ? `/api/memory-reader/tags?continuation=${encodeURIComponent(token)}` : '/api/memory-reader/tags');
+  if (!payload || payload.status !== 'available' || !Array.isArray(payload.tags)) return { status: 'unavailable', tags: [], nextToken: null };
+  return { status: 'available', tags: payload.tags.map(item => safeFacet(item, isSafeTagLocator)).filter(Boolean).slice(0, 12) as CatalogResponse['tags'], nextToken: payload.nextToken === null ? null : safeText(payload.nextToken, 4096) };
 }

@@ -165,27 +165,61 @@ public sealed class LocalMemoryReaderFeature : IAsyncDisposable
     public string? ProtectCatalogContinuation(MemoryReaderCatalogCursor? cursor, MemoryReaderCatalogFilter filter) => cursor is null
         ? null
         : Protect(new(NavigationSchemaVersion, "catalog", null, null, null, null, cursor.GenerationKey, cursor.NextLeafPosition,
-            filter.Namespace, filter.Tag));
+            filter.Namespace, filter.Tag, filter.Search));
 
     public bool TryUnprotectCatalogContinuation(
         string token,
         string? @namespace,
         string? tag,
+        string? search,
         out MemoryReaderCatalogCursor? cursor,
         out MemoryReaderCatalogFilter filter)
     {
         cursor = null;
         filter = MemoryReaderCatalogFilter.Empty;
-        if (string.IsNullOrWhiteSpace(token) || !MemoryReaderCatalogQueryService.TryNormalizeFilter(@namespace, tag, out var supplied)) return false;
+        if (string.IsNullOrWhiteSpace(token) || !MemoryReaderCatalogQueryService.TryNormalizeFilter(@namespace, tag, search, out var supplied)) return false;
         try
         {
             var payload = JsonSerializer.Deserialize<ReaderNavigationToken>(_navigationProtector.Unprotect(token), JsonOptions);
             if (payload is null || !string.Equals(payload.SchemaVersion, NavigationSchemaVersion, StringComparison.Ordinal) ||
                 payload.Kind != "catalog" || string.IsNullOrWhiteSpace(payload.GenerationKey) || payload.NextLeafPosition is null || payload.NextLeafPosition < 0 ||
                 !string.Equals(payload.Namespace, supplied.Namespace, StringComparison.Ordinal) ||
-                !string.Equals(payload.Tag, supplied.Tag, StringComparison.Ordinal)) return false;
+                !string.Equals(payload.Tag, supplied.Tag, StringComparison.Ordinal) ||
+                !string.Equals(payload.Search, supplied.Search, StringComparison.Ordinal)) return false;
             cursor = new(payload.GenerationKey, payload.NextLeafPosition.Value);
             filter = supplied;
+            return true;
+        }
+        catch { return false; }
+    }
+
+    public string? ProtectTreeContinuation(int nextPosition) => nextPosition <= 0
+        ? null
+        : Protect(new(NavigationSchemaVersion, "tree", null, null, null, nextPosition));
+
+    public bool TryUnprotectTreeContinuation(string token, out int position)
+    {
+        position = 0;
+        try
+        {
+            var payload = JsonSerializer.Deserialize<ReaderNavigationToken>(_navigationProtector.Unprotect(token), JsonOptions);
+            if (payload?.SchemaVersion != NavigationSchemaVersion || payload.Kind != "tree" || payload.NextBlockIndex is not > 0) return false;
+            position = payload.NextBlockIndex.Value;
+            return true;
+        }
+        catch { return false; }
+    }
+
+    public string? ProtectTagContinuation(int nextPosition) => nextPosition <= 0 ? null : Protect(new(NavigationSchemaVersion, "tag", null, null, null, nextPosition));
+
+    public bool TryUnprotectTagContinuation(string token, out int position)
+    {
+        position = 0;
+        try
+        {
+            var payload = JsonSerializer.Deserialize<ReaderNavigationToken>(_navigationProtector.Unprotect(token), JsonOptions);
+            if (payload?.SchemaVersion != NavigationSchemaVersion || payload.Kind != "tag" || payload.NextBlockIndex is not > 0) return false;
+            position = payload.NextBlockIndex.Value;
             return true;
         }
         catch { return false; }
@@ -282,5 +316,6 @@ public sealed class LocalMemoryReaderFeature : IAsyncDisposable
         string? GenerationKey = null,
         int? NextLeafPosition = null,
         string? Namespace = null,
-        string? Tag = null);
+        string? Tag = null,
+        string? Search = null);
 }

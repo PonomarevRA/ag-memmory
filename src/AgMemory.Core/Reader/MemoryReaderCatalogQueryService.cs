@@ -61,7 +61,7 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
                 foreach (var leaf in leaves.Entries)
                 {
                     var document = await DescribeLeafAsync(eligibility, leaf, cancellationToken).ConfigureAwait(false);
-                    if (!Matches(document, request.Filter)) continue;
+                    if (!Matches(document, leaf.Preview, request.Filter)) continue;
                     var route = await _reader.GetOrCreateRouteAsync(leaf.MemoryId, cancellationToken).ConfigureAwait(false);
                     documents.Add(new($"/memory-reader/{Uri.EscapeDataString(route.RouteKey)}", leaf.Type, document.Title,
                         document.Namespace, document.Tags, Preview(leaf.Preview), leaf.UpdatedAt));
@@ -105,7 +105,7 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
     {
         if (request is null || request.ContractVersion != _supportedContractVersion || request.Filter is null ||
             request.Cursor is { NextLeafPosition: < 0 } || request.Cursor is { GenerationKey.Length: > 128 }) return false;
-        if (!TryNormalizeFilter(request.Filter.Namespace, request.Filter.Tag, out var normalizedFilter) || normalizedFilter != request.Filter)
+        if (!TryNormalizeFilter(request.Filter.Namespace, request.Filter.Tag, request.Filter.Search, out var normalizedFilter) || normalizedFilter != request.Filter)
             return false;
         try
         {
@@ -168,21 +168,27 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
         tags.Add(tag.Locator, new(tag.Label, 1));
     }
 
-    private static bool Matches(WikiDocument document, MemoryReaderCatalogFilter filter) =>
+    private static bool Matches(WikiDocument document, string preview, MemoryReaderCatalogFilter filter) =>
         (filter.Namespace is null || string.Equals(filter.Namespace, document.Namespace, StringComparison.Ordinal) ||
          document.Namespace.StartsWith(string.Concat(filter.Namespace, "/"), StringComparison.Ordinal)) &&
-        (filter.Tag is null || document.Tags.Select(TagFacet.FromTag).Any(tag => string.Equals(tag.Locator, filter.Tag, StringComparison.Ordinal)));
+        (filter.Tag is null || document.Tags.Select(TagFacet.FromTag).Any(tag => string.Equals(tag.Locator, filter.Tag, StringComparison.Ordinal))) &&
+        (filter.Search is null || string.Concat(document.Title, "\n", Preview(preview)).Contains(filter.Search, StringComparison.OrdinalIgnoreCase));
 
     public static string NamespaceOf(MemoryRecordType type) => $"type/{type.ToString().ToLowerInvariant()}";
 
     public static bool TryNormalizeFilter(string? @namespace, string? tag, out MemoryReaderCatalogFilter filter)
+        => TryNormalizeFilter(@namespace, tag, null, out filter);
+
+    public static bool TryNormalizeFilter(string? @namespace, string? tag, string? search, out MemoryReaderCatalogFilter filter)
     {
         filter = MemoryReaderCatalogFilter.Empty;
         @namespace = string.IsNullOrEmpty(@namespace) ? null : @namespace;
         tag = string.IsNullOrEmpty(tag) ? null : tag;
+        search = string.IsNullOrWhiteSpace(search) ? null : search.Trim();
         if (!string.IsNullOrEmpty(@namespace) && !IsCanonicalNamespace(@namespace)) return false;
         if (!string.IsNullOrEmpty(tag) && !IsTagLocator(tag)) return false;
-        filter = new(@namespace, tag);
+        if (search is { Length: > MemoryReaderLimits.MaximumCatalogSearchCharacters } || search?.Any(char.IsControl) == true) return false;
+        filter = new(@namespace, tag, search);
         return true;
     }
 

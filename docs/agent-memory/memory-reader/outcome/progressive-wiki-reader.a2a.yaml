@@ -1,0 +1,22 @@
+schema: agent-memory-object/v1
+id: memory-reader.outcome.progressive-wiki-reader
+kind: outcome
+area: memory-reader
+status: completed
+title: Delivered progressive wiki tree, tags and search
+summary: Wiki pages now show question/result and weighted links; compiled trees and tags use protected continuations.
+recorded: "2026-08-21"
+updated: "2026-08-21"
+tags: [memory-reader, wiki, tree, tags, search, pagination]
+sources:
+  - kind: code
+    ref: src/AgMemory.Web/Features/MemoryReader/MemoryReaderEndpoint.cs
+  - kind: code
+    ref: src/AgMemory.Web/client/src/features/memory-reader/page-controller.ts
+  - kind: test
+    ref: tests/AgMemory.Web.Tests/MemoryReaderEndpointTests.cs
+payload:
+  change: Added protected paged tree and tag APIs, search-bound catalog cursors, internal UI primitives, and removed the public UI-kit route.
+  measurement: Web tests 51 passed and Vite tests 25 passed.
+  result: Tree portions retain parent context and tag portions are distinct; compiled Wiki scope and existing storage configuration remain unchanged.
+  next_action: Keep future reader controls on internal UI primitives and preserve cursor filter binding.

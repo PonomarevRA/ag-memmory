@@ -18,7 +18,6 @@ export async function renderPage(route: Route): Promise<string> {
     case 'history': return historyPage();
     case 'connect': return `<section class="page-header"><p class="eyebrow">Интеграция</p><h1>Подключение агента</h1><p>Настройте локальный агент и exact scope вне браузера. Учётные данные никогда не вводятся в этот интерфейс.</p></section>`;
     case 'about': return `<section class="page-header"><p class="eyebrow">О проекте</p><h1>AgMemory</h1><p>Локальная память агентов с безопасными API-проекциями и независимой браузерной историей.</p></section>`;
-    case 'ui-kit': return `<section class="page-header"><h1>UI kit</h1><p>Компоненты интерфейса Vite SPA.</p></section>`;
     default: return `<section class="page-header"><h1>Страница не найдена</h1><p>Проверьте адрес или <a href="/">вернитесь на главную</a>.</p></section>`;
   }
 }

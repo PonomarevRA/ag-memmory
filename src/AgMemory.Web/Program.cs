@@ -87,9 +87,14 @@ app.MapGet(MemoryGraphEndpoint.Route, (HttpContext context, string? continuation
     LocalMemoryGraphFeature feature, CancellationToken cancellationToken) =>
     MemoryGraphEndpoint.HandleAsync(context, environment, feature, cancellationToken, continuation));
 app.MapGet(MemoryStatusEndpoint.Route, MemoryStatusEndpoint.HandleAsync);
-app.MapGet(MemoryReaderEndpoint.CatalogRoute, MemoryReaderEndpoint.HandleCatalogAsync);
+app.MapGet(MemoryReaderEndpoint.CatalogRoute, (HttpContext context, string? continuation, string? @namespace, string? tag, string? search,
+    IHostEnvironment environment, LocalMemoryReaderFeature feature, CancellationToken cancellationToken) =>
+    MemoryReaderEndpoint.HandleCatalogAsync(context, continuation, @namespace, tag, search, environment, feature, cancellationToken));
 app.MapGet(MemoryReaderEndpoint.HomeRoute, MemoryReaderEndpoint.HandleHomeAsync);
-app.MapGet(MemoryReaderEndpoint.TreeRoute, MemoryReaderEndpoint.HandleTreeAsync);
+app.MapGet(MemoryReaderEndpoint.TreeRoute, (HttpContext context, string? continuation, IHostEnvironment environment,
+    LocalMemoryReaderFeature feature, CancellationToken cancellationToken) =>
+    MemoryReaderEndpoint.HandleTreeAsync(context, continuation, environment, feature, cancellationToken));
+app.MapGet(MemoryReaderEndpoint.TagRoute, MemoryReaderEndpoint.HandleTagsAsync);
 app.MapGet(MemoryReaderEndpoint.DocumentRoute, MemoryReaderEndpoint.HandleDocumentAsync);
 app.MapFallback(context =>
 {

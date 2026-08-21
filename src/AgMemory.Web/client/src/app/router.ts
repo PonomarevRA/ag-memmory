@@ -4,6 +4,7 @@ import { renderPage } from '../pages/index.js';
 import { mountMemoryGraphPage } from '../features/memory-graph/page.js';
 import { dispose as disposeMemoryGraph } from '../features/memory-graph/page-controller.js';
 import { dispose as disposeChat } from '../features/chat/chat-stream.js';
+import { dispose as disposeMemoryReader, mountMemoryReaderPage } from '../features/memory-reader/page-controller.js';
 import { trackVisit } from '../features/navigation/index.js';
 import { loadAppVersion } from '../features/app-version/api.js';
 
@@ -23,10 +24,12 @@ export async function render(): Promise<void> {
   // Render replaces the route subtree. Release canvas and stream resources first.
   disposeMemoryGraph();
   disposeChat();
+  disposeMemoryReader();
   const route = matchRoute(); document.title = route.title;
   const version = await loadAppVersion();
   app.innerHTML = shell(await renderPage(route), route.path, version);
   if (route.name === 'graph') mountMemoryGraphPage();
+  if (route.name === 'reader') void mountMemoryReaderPage(route.params.id);
   app.querySelector<HTMLElement>('main')?.focus();
   trackVisit(route.path, route.title);
 }

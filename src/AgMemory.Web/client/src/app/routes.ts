@@ -5,7 +5,7 @@ const known = [
   ['status', /^\/memory-status$/, 'Состояние памяти · AgMemory'], ['reader', /^\/memory-reader(?:\/([^/]+))?$/, 'Читать память · AgMemory'],
   ['graph', /^\/memory-graph$/, 'Граф памяти · AgMemory'], ['connect', /^\/connect$/, 'Подключение · AgMemory'],
   ['about', /^\/about$/, 'О проекте · AgMemory'], ['history', /^\/history$/, 'История · AgMemory'],
-  ['settings', /^\/settings$/, 'Настройки · AgMemory'], ['ui-kit', /^\/ui-kit$/, 'UI kit · AgMemory']
+  ['settings', /^\/settings$/, 'Настройки · AgMemory']
 ] as const;
 
 export function matchRoute(pathname = location.pathname): Route {

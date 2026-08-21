@@ -175,14 +175,14 @@ public sealed class MemoryReaderEndpointTests
             var context = Context(IPAddress.Loopback);
 
             var invalid = await ExecuteCatalogAsync(await MemoryReaderEndpoint.HandleCatalogAsync(
-                context, null, "type/Fact", null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+                context, null, "type/Fact", null, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
             Assert.Equal("stale", invalid.Status);
             Assert.False(Directory.Exists(storagePath));
 
             var token = feature.ProtectCatalogContinuation(new("generation", 20), new("type/fact", null));
             context = Context(IPAddress.Loopback);
             var mismatched = await ExecuteCatalogAsync(await MemoryReaderEndpoint.HandleCatalogAsync(
-                context, token, null, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+                context, token, null, null, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
             Assert.Equal("stale", mismatched.Status);
             Assert.False(Directory.Exists(storagePath));
         }
@@ -213,7 +213,7 @@ public sealed class MemoryReaderEndpointTests
             var context = Context(IPAddress.Loopback);
 
             var response = await ExecuteCatalogAsync(await MemoryReaderEndpoint.HandleCatalogAsync(
-                context, null, null, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+                context, null, null, null, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
             var json = await ReadBodyAsync(context);
 
             Assert.Equal("available", response.Status);
@@ -228,7 +228,7 @@ public sealed class MemoryReaderEndpointTests
 
             context = Context(IPAddress.Loopback);
             var filtered = await ExecuteCatalogAsync(await MemoryReaderEndpoint.HandleCatalogAsync(
-                context, null, "engineering/core", shared.Locator, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+                context, null, "engineering/core", shared.Locator, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
             Assert.Equal("available", filtered.Status);
             Assert.Single(filtered.Documents);
             Assert.Equal("Fact", filtered.Documents[0].Type);
@@ -251,13 +251,22 @@ public sealed class MemoryReaderEndpointTests
 
             context = Context(IPAddress.Loopback);
             var tree = await ExecuteTreeAsync(await MemoryReaderEndpoint.HandleTreeAsync(
-                context, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+                context, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
             Assert.Equal("available", tree.Status);
-            var engineeringTree = Assert.Single(tree.Roots, node => node.Label == "engineering");
-            var coreTree = Assert.Single(engineeringTree.Children, node => node.Label == "core");
-            var factType = Assert.Single(coreTree.Children, node => node.Label == "Fact");
-            var factNode = Assert.Single(factType.Children, node => node.Label == "Fact title");
-            Assert.Contains(factNode.Children, node => node.Label == "Outcome" && node.LinkWeight == 1);
+            Assert.Contains(tree.Roots, node => node.Label == "Fact title");
+            Assert.Contains(tree.Roots, node => node.Label == "Outcome" && node.LinkWeight == 1);
+            Assert.All(tree.Roots, node => Assert.Empty(node.Children));
+            Assert.Null(tree.NextToken);
+
+            context = Context(IPAddress.Loopback);
+            var tags = await ExecuteTagsAsync(await MemoryReaderEndpoint.HandleTagsAsync(
+                context, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+            Assert.Equal("available", tags.Status);
+            Assert.NotEmpty(tags.Tags);
+            context = Context(IPAddress.Loopback);
+            var tagContinuation = await ExecuteTagsAsync(await MemoryReaderEndpoint.HandleTagsAsync(
+                context, feature.ProtectTagContinuation(12), new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+            Assert.Equal("available", tagContinuation.Status);
 
             var outcomeRouteKey = document.Children[0].Href.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
             context = Context(IPAddress.Loopback);
@@ -284,6 +293,109 @@ public sealed class MemoryReaderEndpointTests
                 var compiledChild = Assert.Single(staleRelations);
                 Assert.Equal(outcome.Value, compiledChild.TargetMemoryId.Value);
             }
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public async Task DevelopmentLoopbackTree_PaginatesNestedNodesWithStableParentContext()
+    {
+        var root = TemporaryPath();
+        var storagePath = Path.Combine(root, "reader-lancedb");
+        var records = Enumerable.Range(0, 34)
+            .Select(index =>
+            {
+                var id = new MemoryId($"tree-node-{index:D2}");
+                var link = index == 33 ? string.Empty : $" [[doc:tree/node-{index + 1:D2}|Node {index + 1:D2}]]";
+                return Record(id, $"Node {index:D2}{link}");
+            })
+            .ToArray();
+        try
+        {
+            Directory.CreateDirectory(root);
+            foreach (var record in records) await SeedAsync(storagePath, record);
+            await using (var store = new LanceDbMemoryStore(new(storagePath)))
+            {
+                foreach (var (record, index) in records.Select((record, index) => (record, index)))
+                    await store.UpsertWikiMetadataAsync(new(Scope, record.Id, 1, $"Node {index:D2}", "tree", $"node-{index:D2}", []), default);
+            }
+
+            await using var feature = new LocalMemoryReaderFeature(Options(records[0].Id), root, Provider(root));
+            var environment = new TestHostEnvironment(isDevelopment: true, root);
+            var context = Context(IPAddress.Loopback);
+            var first = await ExecuteTreeAsync(await MemoryReaderEndpoint.HandleTreeAsync(
+                context, null, environment, feature, default), context);
+
+            Assert.Equal("available", first.Status);
+            Assert.Equal(32, first.Roots.Count);
+            Assert.NotNull(first.NextToken);
+
+            context = Context(IPAddress.Loopback);
+            var second = await ExecuteTreeAsync(await MemoryReaderEndpoint.HandleTreeAsync(
+                context, first.NextToken, environment, feature, default), context);
+
+            Assert.Equal("available", second.Status);
+            Assert.NotEmpty(second.Roots);
+            var nodes = first.Roots.Concat(second.Roots).ToArray();
+            Assert.Equal(nodes.Length, nodes.Select(node => node.NodeKey).Distinct(StringComparer.Ordinal).Count());
+            foreach (var node in nodes)
+            {
+                Assert.NotNull(node.NodeKey);
+                if (node.ParentKey is null)
+                {
+                    Assert.Equal(0, node.Depth);
+                    continue;
+                }
+
+                var parent = Assert.Single(nodes, candidate => candidate.NodeKey == node.ParentKey);
+                Assert.Equal(parent.Depth + 1, node.Depth);
+            }
+        }
+        finally
+        {
+            DeleteTemporaryPath(root);
+        }
+    }
+
+    [Fact]
+    public async Task DevelopmentLoopbackTags_PaginatesDistinctMetadataFacets()
+    {
+        var root = TemporaryPath();
+        var storagePath = Path.Combine(root, "reader-lancedb");
+        var records = Enumerable.Range(0, 13)
+            .Select(index => Record(new MemoryId($"tag-node-{index:D2}"), $"Tag node {index:D2}"))
+            .ToArray();
+        try
+        {
+            Directory.CreateDirectory(root);
+            foreach (var record in records) await SeedAsync(storagePath, record);
+            await using (var store = new LanceDbMemoryStore(new(storagePath)))
+            {
+                foreach (var (record, index) in records.Select((record, index) => (record, index)))
+                    await store.UpsertWikiMetadataAsync(new(Scope, record.Id, 1, $"Tag node {index:D2}", "tags", $"node-{index:D2}", [$"tag {index:D2}"]), default);
+            }
+
+            await using var feature = new LocalMemoryReaderFeature(Options(records[0].Id), root, Provider(root));
+            var environment = new TestHostEnvironment(isDevelopment: true, root);
+            var context = Context(IPAddress.Loopback);
+            var first = await ExecuteTagsAsync(await MemoryReaderEndpoint.HandleTagsAsync(
+                context, null, environment, feature, default), context);
+
+            Assert.Equal("available", first.Status);
+            Assert.Equal(12, first.Tags.Count);
+            Assert.NotNull(first.NextToken);
+
+            context = Context(IPAddress.Loopback);
+            var second = await ExecuteTagsAsync(await MemoryReaderEndpoint.HandleTagsAsync(
+                context, first.NextToken, environment, feature, default), context);
+
+            Assert.Equal("available", second.Status);
+            Assert.NotEmpty(second.Tags);
+            Assert.Empty(first.Tags.Select(tag => tag.Locator).Intersect(second.Tags.Select(tag => tag.Locator), StringComparer.Ordinal));
+            Assert.Equal(13, first.Tags.Concat(second.Tags).Select(tag => tag.Locator).Distinct(StringComparer.Ordinal).Count());
         }
         finally
         {
@@ -418,6 +530,14 @@ public sealed class MemoryReaderEndpointTests
         await result.ExecuteAsync(context);
         context.Response.Body.Position = 0;
         return (await JsonSerializer.DeserializeAsync<MemoryReaderTreeApiResponse>(
+            context.Response.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web)))!;
+    }
+
+    private static async Task<MemoryReaderTagApiResponse> ExecuteTagsAsync(IResult result, HttpContext context)
+    {
+        await result.ExecuteAsync(context);
+        context.Response.Body.Position = 0;
+        return (await JsonSerializer.DeserializeAsync<MemoryReaderTagApiResponse>(
             context.Response.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web)))!;
     }
 

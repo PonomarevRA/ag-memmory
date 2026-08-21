@@ -14,6 +14,7 @@ public static class MemoryReaderLimits
     public const int MaximumCatalogTagFacets = 64;
     public const int MaximumCatalogTagEntityCharacters = 256;
     public const int MaximumCatalogTagLabelCharacters = 80;
+    public const int MaximumCatalogSearchCharacters = 120;
     public const int MaximumTreeNodes = 256;
     public const int MaximumTreeNamespaceDepth = 8;
 }
@@ -51,9 +52,9 @@ public sealed record MemoryReaderCatalogRequest(
     ContractVersion ContractVersion);
 
 /// <summary>Canonical server-validated facet locators. They never contain a durable memory identifier.</summary>
-public sealed record MemoryReaderCatalogFilter(string? Namespace, string? Tag)
+public sealed record MemoryReaderCatalogFilter(string? Namespace, string? Tag, string? Search = null)
 {
-    public static MemoryReaderCatalogFilter Empty { get; } = new(null, null);
+    public static MemoryReaderCatalogFilter Empty { get; } = new(null, null, null);
 }
 
 /// <summary>One bounded source record used only while the server builds immutable catalog leaves.</summary>

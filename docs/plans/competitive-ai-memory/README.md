@@ -22,8 +22,9 @@
 1. [00 overview](00-competitive-analysis/overview.md) · [adopt-reject](00-competitive-analysis/adopt-reject.md)
 2. [01 done](01-current-baseline/done.md) · [gaps](01-current-baseline/gaps.md)
 3. [02 waves](02-roadmap/waves.md)
-4. Work-packages: [A](03-work-packages/A-event-catalog.md) · [B](03-work-packages/B-typed-inject.md) · [C](03-work-packages/C-compiled-wiki-spa.md) · [D](03-work-packages/D-web-mcp-alignment.md)
-5. [04 criteria](04-acceptance/criteria.md)
+4. Work-packages V1: [A](03-work-packages/A-event-catalog.md) · [B](03-work-packages/B-typed-inject.md) · [C](03-work-packages/C-compiled-wiki-spa.md) · [D](03-work-packages/D-web-mcp-alignment.md)
+5. [04 criteria](04-acceptance/criteria.md) · [BCS RPA context](05-bcs-rpa-connection.md)
+6. **Актуальная реализационная версия:** [план V2](06-v2-implementation-plan.md)
 
 ## AGM / провайдеры
 
