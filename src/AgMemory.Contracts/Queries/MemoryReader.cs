@@ -131,7 +131,9 @@ public sealed record MemoryReaderCatalogPage(
     IReadOnlyList<MemoryReaderCatalogFacet> Namespaces,
     IReadOnlyList<MemoryReaderCatalogFacet> Tags,
     MemoryReaderCatalogCursor? NextCursor,
-    ContractVersion ContractVersion);
+    ContractVersion ContractVersion,
+    // Internal immutable anchor for server-issued continuations. Browser DTOs omit this value.
+    string? GenerationKey = null);
 
 /// <summary>One bounded source row. Adapters must not materialise embeddings for reader operations.</summary>
 public sealed record MemoryReaderSourceRecord(

@@ -31,6 +31,17 @@ public interface IMemoryReaderCatalogQueryService
     Task<MemoryReaderCatalogPage> BrowseAsync(MemoryReaderCatalogRequest request, CancellationToken cancellationToken);
 }
 
+public interface IMemoryRecordBrowserQueryService
+{
+    Task<MemoryRecordBrowserPage> BrowseAsync(MemoryRecordBrowserRequest request, CancellationToken cancellationToken);
+}
+
+/// <summary>Dedicated selected-column source for the gated records browser; never use IMemoryStore.ListAsync.</summary>
+public interface IMemoryRecordBrowserSource
+{
+    Task<IReadOnlyList<MemoryRecordBrowserSourceRecord>> ReadAsync(MemoryRecordBrowserSourceRequest request, CancellationToken cancellationToken);
+}
+
 public interface IMemoryGraphPortionQueryService
 {
     Task<MemoryGraphPortion> ReadPortionAsync(MemoryGraphPortionRequest request, CancellationToken cancellationToken);

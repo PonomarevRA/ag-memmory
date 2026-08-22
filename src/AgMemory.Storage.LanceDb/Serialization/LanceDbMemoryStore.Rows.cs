@@ -187,6 +187,52 @@ public sealed partial class LanceDbMemoryStore
             message.MemoryId, message.ContractVersion.Value);
     }
 
+    private sealed record PersistedUsageAuditEventRow(
+        string EventId,
+        string OccurredAtUtc,
+        string SchemaVersion,
+        string Source,
+        string Operation,
+        string ClientLabel,
+        string? AreaId,
+        string QueryHash,
+        string QueryLengthChars,
+        string ResultCount,
+        string SelectedContextChars,
+        string DeliveredTokensEstimate,
+        string EstimationMethodVersion,
+        string Outcome,
+        string? FailureClass)
+    {
+        public static PersistedUsageAuditEventRow From(UsageAuditEvent usageEvent) => new(
+            usageEvent.EventId.ToString("D"), Utc(usageEvent.OccurredAt), usageEvent.SchemaVersion,
+            usageEvent.Source.ToString(), usageEvent.Operation.ToString(), usageEvent.ClientLabel.ToString(), usageEvent.AreaId,
+            usageEvent.Query.Hash, usageEvent.Query.LengthChars.ToString(CultureInfo.InvariantCulture),
+            usageEvent.ResultCount.ToString(CultureInfo.InvariantCulture), usageEvent.SelectedContextChars.ToString(CultureInfo.InvariantCulture),
+            usageEvent.DeliveredTokensEstimate.ToString(CultureInfo.InvariantCulture), usageEvent.EstimationMethodVersion,
+            usageEvent.Outcome.ToString(), usageEvent.FailureClass?.ToString());
+
+        public static PersistedUsageAuditEventRow Read(RecordBatch batch, int index) => new(
+            Required(batch, "event_id", index), Required(batch, "occurred_at_utc", index), Required(batch, "schema_version", index),
+            Required(batch, "source", index), Required(batch, "operation", index), Required(batch, "client_label", index), Value(batch, "area_id", index),
+            Required(batch, "query_hash", index), Required(batch, "query_length_chars", index), Required(batch, "result_count", index),
+            Required(batch, "selected_context_chars", index), Required(batch, "delivered_tokens_estimate", index),
+            Required(batch, "estimation_method_version", index), Required(batch, "outcome", index), Value(batch, "failure_class", index));
+
+        public UsageAuditEvent ToUsageAuditEvent()
+        {
+            var usageEvent = new UsageAuditEvent(
+                Guid.Parse(EventId), ParseUtc(OccurredAtUtc),
+                ParseEnum<UsageAuditSource>(Source), ParseEnum<UsageAuditOperation>(Operation), ParseEnum<UsageAuditClientLabel>(ClientLabel), AreaId,
+                new UsageAuditQueryDescriptor(QueryHash, int.Parse(QueryLengthChars, CultureInfo.InvariantCulture)),
+                int.Parse(ResultCount, CultureInfo.InvariantCulture), int.Parse(SelectedContextChars, CultureInfo.InvariantCulture),
+                int.Parse(DeliveredTokensEstimate, CultureInfo.InvariantCulture), EstimationMethodVersion,
+                ParseEnum<UsageAuditOutcome>(Outcome), string.IsNullOrWhiteSpace(FailureClass) ? null : ParseEnum<UsageAuditFailureClass>(FailureClass), SchemaVersion);
+            usageEvent.Validate();
+            return usageEvent;
+        }
+    }
+
     private sealed record PersistedReaderRouteRow(string RouteKey, string MemoryId)
     {
         public static PersistedReaderRouteRow Read(RecordBatch batch, int index) => new(

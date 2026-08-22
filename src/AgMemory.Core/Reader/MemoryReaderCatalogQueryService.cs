@@ -77,7 +77,8 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
                 if (next is null) break;
                 cursor = next;
             }
-            return Result(MemoryReaderCatalogState.Available, documents, facets.Namespaces, facets.Tags, next, request.ContractVersion);
+            return Result(MemoryReaderCatalogState.Available, documents, facets.Namespaces, facets.Tags, next, request.ContractVersion,
+                firstLeaf.GenerationKey);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -263,5 +264,6 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
         IReadOnlyList<MemoryReaderCatalogFacet> namespaces,
         IReadOnlyList<MemoryReaderCatalogFacet> tags,
         MemoryReaderCatalogCursor? next,
-        ContractVersion? version) => new(state, documents, namespaces, tags, next, version ?? _supportedContractVersion);
+        ContractVersion? version,
+        string? generationKey = null) => new(state, documents, namespaces, tags, next, version ?? _supportedContractVersion, generationKey);
 }

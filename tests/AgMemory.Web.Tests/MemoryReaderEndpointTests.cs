@@ -29,6 +29,65 @@ public sealed class MemoryReaderEndpointTests
     }
 
     [Fact]
+    public async Task Areas_ExposeOnlySafeMetadata_AndRejectUnknownAreaBeforeStoreAccess()
+    {
+        var root = TemporaryPath();
+        try
+        {
+            var options = new MemoryReaderHostOptions
+            {
+                Areas = [
+                    new() { Id = "engineering", Label = "Engineering", StoragePath = "engineering-db", ActorId = "reader-actor", Scope = ScopeOptions() },
+                    new() { Id = "Bad_Id", Label = "Must not appear", StoragePath = "bad-db", ActorId = "reader-actor", Scope = ScopeOptions() }
+                ]
+            };
+            await using var feature = new LocalMemoryReaderFeature(options, root, Provider(root));
+            Assert.True(feature.TryResolveArea("engineering", out var area));
+            Assert.Equal("engineering", area);
+            Assert.False(feature.TryResolveArea("other", out _));
+            var context = Context(IPAddress.Loopback);
+            var response = await ExecuteAsync(await MemoryReaderEndpoint.HandleHomeAsync(context,
+                new TestHostEnvironment(isDevelopment: true, root), feature, default, "other"), context);
+            Assert.Equal("unavailable", response.Status);
+            Assert.Single(feature.Areas);
+            Assert.Equal("engineering", feature.Areas[0].Id);
+            Assert.Equal("Engineering", feature.Areas[0].Label);
+            Assert.False(Directory.Exists(Path.Combine(root, "engineering-db")));
+        }
+        finally { DeleteTemporaryPath(root); }
+    }
+
+    [Fact]
+    public async Task AreaBoundTagAndTreeContinuations_AreRejectedBeforeOpeningAnotherArea()
+    {
+        var root = TemporaryPath();
+        try
+        {
+            var options = new MemoryReaderHostOptions
+            {
+                Areas = [
+                    new() { Id = "engineering", Label = "Engineering", StoragePath = "engineering-db", ActorId = "reader-actor", Scope = ScopeOptions() },
+                    new() { Id = "product", Label = "Product", StoragePath = "product-db", ActorId = "reader-actor", Scope = ScopeOptions() }
+                ]
+            };
+            await using var feature = new LocalMemoryReaderFeature(options, root, Provider(root));
+            var environment = new TestHostEnvironment(isDevelopment: true, root);
+
+            var tagContext = Context(IPAddress.Loopback);
+            var tag = await ExecuteTagsAsync(await MemoryReaderEndpoint.HandleTagsAsync(tagContext,
+                feature.ProtectTagContinuation("generation-a", 12, "engineering"), environment, feature, default, "product"), tagContext);
+            Assert.Equal("changed", tag.Status);
+
+            var treeContext = Context(IPAddress.Loopback);
+            var tree = await ExecuteTreeAsync(await MemoryReaderEndpoint.HandleTreeAsync(treeContext,
+                feature.ProtectTreeContinuation("generation-a", 32, "engineering"), environment, feature, default, "product"), treeContext);
+            Assert.Equal("changed", tree.Status);
+            Assert.False(Directory.Exists(Path.Combine(root, "product-db")));
+        }
+        finally { DeleteTemporaryPath(root); }
+    }
+
+    [Fact]
     public async Task UnconfiguredHomeEndpoint_ReturnsUnavailableWithoutOpeningStorage()
     {
         var root = TemporaryPath();
@@ -234,7 +293,7 @@ public sealed class MemoryReaderEndpointTests
             Assert.Equal("Fact", filtered.Documents[0].Type);
             Assert.Equal("Fact title", filtered.Documents[0].Title);
 
-            var routeKey = filtered.Documents[0].Href.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+            var routeKey = new Uri($"http://localhost{filtered.Documents[0].Href}").Segments.Last();
             context = Context(IPAddress.Loopback);
             var document = await ExecuteAsync(await MemoryReaderEndpoint.HandleDocumentAsync(
                 context, routeKey, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
@@ -265,10 +324,10 @@ public sealed class MemoryReaderEndpointTests
             Assert.NotEmpty(tags.Tags);
             context = Context(IPAddress.Loopback);
             var tagContinuation = await ExecuteTagsAsync(await MemoryReaderEndpoint.HandleTagsAsync(
-                context, feature.ProtectTagContinuation(12), new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
-            Assert.Equal("available", tagContinuation.Status);
+                context, "legacy-position-only-token", new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
+            Assert.Equal("changed", tagContinuation.Status);
 
-            var outcomeRouteKey = document.Children[0].Href.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
+            var outcomeRouteKey = new Uri($"http://localhost{document.Children[0].Href}").Segments.Last();
             context = Context(IPAddress.Loopback);
             var outcomeDocument = await ExecuteAsync(await MemoryReaderEndpoint.HandleDocumentAsync(
                 context, outcomeRouteKey, null, new TestHostEnvironment(isDevelopment: true, root), feature, default), context);
@@ -474,6 +533,12 @@ public sealed class MemoryReaderEndpointTests
             ChatId = Scope.ChatId?.Value,
             RunId = Scope.RunId?.Value
         }
+    };
+
+    private static MemoryReaderScopeOptions ScopeOptions() => new()
+    {
+        TenantId = Scope.TenantId.Value, ProjectId = Scope.ProjectId?.Value, WorkspaceId = Scope.WorkspaceId?.Value,
+        ChatId = Scope.ChatId?.Value, RunId = Scope.RunId?.Value
     };
 
     private static MemoryRecord Record(MemoryId id, string text, MemoryRecordType type = MemoryRecordType.Fact, IReadOnlyList<string>? entities = null) => new(

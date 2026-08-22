@@ -12,6 +12,8 @@ public sealed class MemoryReaderHostOptions
     public string? ActorId { get; init; }
     public string? HomeMemoryId { get; init; }
     public MemoryReaderScopeOptions? Scope { get; init; }
+    /// <summary>Server-owned reader areas. Browser clients can only select the safe id.</summary>
+    public IReadOnlyList<MemoryReaderAreaOptions>? Areas { get; init; }
 
     internal MemoryReaderHostConfiguration? TryCreate(string dataDirectory)
     {
@@ -44,7 +46,46 @@ public sealed class MemoryReaderHostOptions
         }
     }
 
+    internal IReadOnlyList<MemoryReaderAreaConfiguration> TryCreateAreas(string dataDirectory)
+    {
+        if (Areas is not { Count: > 0 })
+        {
+            var legacy = TryCreate(dataDirectory);
+            return legacy is null ? [] : [new("default", "Память", legacy)];
+        }
+
+        var result = new List<MemoryReaderAreaConfiguration>();
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var area in Areas)
+        {
+            if (area is null || !area.Enabled || !IsSafeAreaId(area.Id) || string.IsNullOrWhiteSpace(area.Label) || area.Label.Length > 120)
+                continue;
+            var id = area.Id!;
+            if (!ids.Add(id)) continue;
+            var configuration = new MemoryReaderHostOptions
+            {
+                Enabled = true, StoragePath = area.StoragePath, ActorId = area.ActorId,
+                HomeMemoryId = area.HomeMemoryId, Scope = area.Scope
+            }.TryCreate(dataDirectory);
+            if (configuration is not null) result.Add(new(id, area.Label, configuration));
+        }
+        return result;
+    }
+
     private static ScopeId? Optional(string? value) => value is null ? null : new ScopeId(value);
+    private static bool IsSafeAreaId(string? value) => value is { Length: > 0 and <= 64 } &&
+        value[0] is >= 'a' and <= 'z' && value.All(character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '-');
+}
+
+public sealed class MemoryReaderAreaOptions
+{
+    public string? Id { get; init; }
+    public string? Label { get; init; }
+    public bool Enabled { get; init; } = true;
+    public string? StoragePath { get; init; }
+    public string? ActorId { get; init; }
+    public string? HomeMemoryId { get; init; }
+    public MemoryReaderScopeOptions? Scope { get; init; }
 }
 
 public sealed class MemoryReaderScopeOptions
@@ -57,3 +98,4 @@ public sealed class MemoryReaderScopeOptions
 }
 
 internal sealed record MemoryReaderHostConfiguration(ActorId Actor, MemoryScope Scope, MemoryId? HomeMemoryId, string StoragePath);
+internal sealed record MemoryReaderAreaConfiguration(string Id, string Label, MemoryReaderHostConfiguration Configuration);

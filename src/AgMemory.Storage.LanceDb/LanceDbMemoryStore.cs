@@ -13,7 +13,7 @@ namespace AgMemory.Storage.LanceDb;
 /// Local LanceDB implementation of the provider-neutral durable-memory and search ports.
 /// LanceDB, Arrow schemas and SQL-like predicates are deliberately implementation details.
 /// </summary>
-public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSource, IMemoryReaderSource, IMemoryReaderCatalogSource, IMemoryWikiMetadataStore, IMemoryReaderWikiRelationSource, IVectorSearch, ILexicalSearch, IAsyncDisposable
+public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSource, IMemoryReaderSource, IMemoryReaderCatalogSource, IMemoryRecordBrowserSource, IMemoryWikiMetadataStore, IMemoryReaderWikiRelationSource, IUsageAuditStore, IVectorSearch, ILexicalSearch, IAsyncDisposable
 {
     /// <summary>The initial, fail-closed schema policy for tables owned by this adapter.</summary>
     public const string CurrentStorageSchemaVersion = "1.0";
@@ -29,6 +29,7 @@ public sealed partial class LanceDbMemoryStore : IMemoryStore, IMemoryGraphSourc
     private const string ReaderWikiMetadataTable = "memory_reader_wiki_metadata";
     private const string ReaderWikiDocumentsTable = "memory_reader_wiki_documents";
     private const string ReaderWikiRelationsTable = "memory_reader_wiki_relations";
+    private const string UsageAuditEventsTable = "usage_audit_events";
     private const string SchemaManifestTable = "agmemory_schema_manifest";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] MemoryColumnNames =

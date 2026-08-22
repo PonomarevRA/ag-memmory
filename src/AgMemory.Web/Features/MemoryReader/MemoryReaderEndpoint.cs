@@ -11,22 +11,33 @@ public static class MemoryReaderEndpoint
     public const string HomeRoute = "/api/memory-reader/home";
     public const string TreeRoute = "/api/memory-reader/tree";
     public const string TagRoute = "/api/memory-reader/tags";
+    public const string AreasRoute = "/api/memory-reader/areas";
     public const string DocumentRoute = "/api/memory-reader/{routeKey}";
+
+    public static IResult HandleAreas(HttpContext context, IHostEnvironment environment, LocalMemoryReaderFeature feature)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (!MemoryReaderAccessPolicy.AllowsStoreAccess(feature.IsConfigured, environment.IsDevelopment(), context.Connection.RemoteIpAddress))
+            return new MemoryReaderAreasJsonResult(new MemoryReaderAreasApiResponse("unavailable", []));
+        return new MemoryReaderAreasJsonResult(new MemoryReaderAreasApiResponse("available", feature.Areas));
+    }
 
 
     public static async Task<IResult> HandleHomeAsync(
         HttpContext context,
         IHostEnvironment environment,
         LocalMemoryReaderFeature feature,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? area = null)
     {
         context.Response.Headers.CacheControl = "no-store";
         if (!MemoryReaderAccessPolicy.AllowsStoreAccess(feature.IsConfigured, environment.IsDevelopment(), context.Connection.RemoteIpAddress))
             return Json(MemoryReaderApiResponse.Unavailable);
 
+        if (!feature.TryResolveArea(area, out var resolvedArea)) return Json(MemoryReaderApiResponse.Unavailable);
         try
         {
-            return Json(ToApiResponse(await feature.ReadHomeAsync(cancellationToken).ConfigureAwait(false), feature));
+            return Json(ToApiResponse(await feature.ReadHomeAsync(resolvedArea, cancellationToken).ConfigureAwait(false), feature, resolvedArea));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -46,16 +57,18 @@ public static class MemoryReaderEndpoint
         string? search,
         IHostEnvironment environment,
         LocalMemoryReaderFeature feature,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? area = null)
     {
         context.Response.Headers.CacheControl = "no-store";
         if (!MemoryReaderAccessPolicy.AllowsStoreAccess(feature.IsConfigured, environment.IsDevelopment(), context.Connection.RemoteIpAddress))
             return CatalogJson(MemoryReaderCatalogApiResponse.Unavailable);
+        if (!feature.TryResolveArea(area, out var resolvedArea)) return CatalogJson(MemoryReaderCatalogApiResponse.Unavailable);
         MemoryReaderCatalogCursor? cursor = null;
         MemoryReaderCatalogFilter filter;
         if (!string.IsNullOrWhiteSpace(continuation))
         {
-            if (!feature.TryUnprotectCatalogContinuation(continuation, @namespace, tag, search, out cursor, out filter))
+            if (!feature.TryUnprotectCatalogContinuation(continuation, @namespace, tag, search, resolvedArea, out cursor, out filter))
                 return CatalogJson(MemoryReaderCatalogApiResponse.Stale);
         }
         else if (!MemoryReaderCatalogQueryService.TryNormalizeFilter(@namespace, tag, search, out filter))
@@ -64,8 +77,11 @@ public static class MemoryReaderEndpoint
         }
         try
         {
-            var page = await feature.BrowseAsync(cursor, filter, cancellationToken).ConfigureAwait(false);
-            return CatalogJson(ToCatalogApiResponse(page, feature, filter));
+            var page = await feature.BrowseAsync(cursor, filter, resolvedArea, cancellationToken).ConfigureAwait(false);
+            // A tag locator is meaningful only inside its selected area and immutable catalog generation.
+            if (page.State == MemoryReaderCatalogState.Available && filter.Tag is not null && !page.Tags.Any(facet => string.Equals(facet.Locator, filter.Tag, StringComparison.Ordinal)))
+                return CatalogJson(MemoryReaderCatalogApiResponse.Stale);
+            return CatalogJson(ToCatalogApiResponse(page, feature, filter, resolvedArea));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception exception)
@@ -77,19 +93,24 @@ public static class MemoryReaderEndpoint
         }
     }
 
-    public static async Task<IResult> HandleTagsAsync(HttpContext context, string? continuation, IHostEnvironment environment, LocalMemoryReaderFeature feature, CancellationToken cancellationToken)
+    public static async Task<IResult> HandleTagsAsync(HttpContext context, string? continuation, IHostEnvironment environment, LocalMemoryReaderFeature feature, CancellationToken cancellationToken, string? area = null)
     {
         context.Response.Headers.CacheControl = "no-store";
         if (!MemoryReaderAccessPolicy.AllowsStoreAccess(feature.IsConfigured, environment.IsDevelopment(), context.Connection.RemoteIpAddress)) return TagJson(MemoryReaderTagApiResponse.Unavailable);
+        if (!feature.TryResolveArea(area, out var resolvedArea)) return TagJson(MemoryReaderTagApiResponse.Unavailable);
         var start = 0;
-        if (!string.IsNullOrWhiteSpace(continuation) && !feature.TryUnprotectTagContinuation(continuation, out start)) return TagJson(MemoryReaderTagApiResponse.Unavailable);
+        string? continuationGeneration = null;
+        if (!string.IsNullOrWhiteSpace(continuation) && !feature.TryUnprotectTagContinuation(continuation, resolvedArea, out continuationGeneration, out start))
+            return TagJson(MemoryReaderTagApiResponse.Changed);
         try
         {
-            var page = await feature.BrowseAsync(null, MemoryReaderCatalogFilter.Empty, cancellationToken).ConfigureAwait(false);
+            var page = await feature.BrowseAsync(null, MemoryReaderCatalogFilter.Empty, resolvedArea, cancellationToken).ConfigureAwait(false);
             if (page.State != MemoryReaderCatalogState.Available) return TagJson(MemoryReaderTagApiResponse.Unavailable);
+            if (string.IsNullOrWhiteSpace(page.GenerationKey) || (continuationGeneration is not null && !string.Equals(continuationGeneration, page.GenerationKey, StringComparison.Ordinal)))
+                return TagJson(MemoryReaderTagApiResponse.Changed);
             const int size = 12;
             var tags = page.Tags.Skip(start).Take(size).Select(tag => new MemoryReaderCatalogFacetDto(tag.Locator, tag.Label, tag.Count)).ToArray();
-            var next = start + tags.Length < page.Tags.Count ? feature.ProtectTagContinuation(start + tags.Length) : null;
+            var next = start + tags.Length < page.Tags.Count ? feature.ProtectTagContinuation(page.GenerationKey, start + tags.Length, resolvedArea) : null;
             return TagJson(new("available", tags, next));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
@@ -101,18 +122,23 @@ public static class MemoryReaderEndpoint
         string? continuation,
         IHostEnvironment environment,
         LocalMemoryReaderFeature feature,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? area = null)
     {
         context.Response.Headers.CacheControl = "no-store";
         if (!MemoryReaderAccessPolicy.AllowsStoreAccess(feature.IsConfigured, environment.IsDevelopment(), context.Connection.RemoteIpAddress))
             return TreeJson(MemoryReaderTreeApiResponse.Unavailable);
-        if (!string.IsNullOrWhiteSpace(continuation) && !feature.TryUnprotectTreeContinuation(continuation, out _))
-            return TreeJson(MemoryReaderTreeApiResponse.Unavailable);
+        if (!feature.TryResolveArea(area, out var resolvedArea)) return TreeJson(MemoryReaderTreeApiResponse.Unavailable);
+        var start = 0;
+        string? continuationGeneration = null;
+        if (!string.IsNullOrWhiteSpace(continuation) && !feature.TryUnprotectTreeContinuation(continuation, resolvedArea, out continuationGeneration, out start))
+            return TreeJson(MemoryReaderTreeApiResponse.Changed);
         try
         {
-            var page = await feature.ReadTreeAsync(cancellationToken).ConfigureAwait(false);
-            var start = string.IsNullOrWhiteSpace(continuation) ? 0 : feature.TryUnprotectTreeContinuation(continuation, out var position) ? position : 0;
-            return TreeJson(ToTreeApiResponse(page, feature, start));
+            var page = await feature.ReadTreeAsync(resolvedArea, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(page.GenerationKey) || (continuationGeneration is not null && !string.Equals(continuationGeneration, page.GenerationKey, StringComparison.Ordinal)))
+                return TreeJson(MemoryReaderTreeApiResponse.Changed);
+            return TreeJson(ToTreeApiResponse(page, feature, resolvedArea, start));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch { return TreeJson(MemoryReaderTreeApiResponse.Unavailable); }
@@ -124,28 +150,29 @@ public static class MemoryReaderEndpoint
         string? block,
         IHostEnvironment environment,
         LocalMemoryReaderFeature feature,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? area = null)
     {
         context.Response.Headers.CacheControl = "no-store";
         if (!MemoryReaderAccessPolicy.AllowsStoreAccess(feature.IsConfigured, environment.IsDevelopment(), context.Connection.RemoteIpAddress))
             return Json(MemoryReaderApiResponse.Unavailable);
-        if (string.IsNullOrWhiteSpace(routeKey) || routeKey.Length > 128)
+        if (!feature.TryResolveArea(area, out var resolvedArea) || string.IsNullOrWhiteSpace(routeKey) || routeKey.Length > 128)
             return Json(MemoryReaderApiResponse.NotFound);
 
         string? blockKey = null;
         MemoryReaderBlockCursor? cursor = null;
-        if (!string.IsNullOrWhiteSpace(block) && !feature.TryUnprotectNavigation(routeKey, block, out blockKey, out cursor))
+        if (!string.IsNullOrWhiteSpace(block) && !feature.TryUnprotectNavigation(routeKey, block, resolvedArea, out blockKey, out cursor))
             return Json(MemoryReaderApiResponse.Stale);
 
         try
         {
-            var page = await feature.ReadDocumentAsync(routeKey, blockKey, cursor, cancellationToken).ConfigureAwait(false);
+            var page = await feature.ReadDocumentAsync(routeKey, blockKey, cursor, resolvedArea, cancellationToken).ConfigureAwait(false);
             if (page.State != MemoryReaderDocumentState.Available)
-                return Json(ToApiResponse(page, feature));
-            var snapshot = await feature.ReadDocumentWikiSnapshotAsync(routeKey, page.RecordVersion ?? 0, cancellationToken).ConfigureAwait(false);
+                return Json(ToApiResponse(page, feature, resolvedArea));
+            var snapshot = await feature.ReadDocumentWikiSnapshotAsync(routeKey, page.RecordVersion ?? 0, resolvedArea, cancellationToken).ConfigureAwait(false);
             return snapshot is null
                 ? Json(MemoryReaderApiResponse.Changed)
-                : Json(ToApiResponse(page, feature, snapshot.Metadata, snapshot.Children, snapshot.Related, snapshot.Backlinks));
+                : Json(ToApiResponse(page, feature, resolvedArea, snapshot.Metadata, snapshot.Children, snapshot.Related, snapshot.Backlinks));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -162,21 +189,21 @@ public static class MemoryReaderEndpoint
     private static IResult TreeJson(MemoryReaderTreeApiResponse response) => new MemoryReaderTreeJsonResult(response);
     private static IResult TagJson(MemoryReaderTagApiResponse response) => new MemoryReaderTagJsonResult(response);
 
-    private static MemoryReaderTreeApiResponse ToTreeApiResponse(MemoryReaderTreePage page, LocalMemoryReaderFeature feature, int start = 0) => page.Status switch
+    private static MemoryReaderTreeApiResponse ToTreeApiResponse(MemoryReaderTreePage page, LocalMemoryReaderFeature feature, string area, int start = 0) => page.Status switch
     {
-        "available" => TreeSlice(page, feature, start),
+        "available" => TreeSlice(page, feature, area, start),
         "catalog-not-ready" => MemoryReaderTreeApiResponse.NotReady,
         _ => MemoryReaderTreeApiResponse.Unavailable
     };
 
-    private static MemoryReaderTreeApiResponse TreeSlice(MemoryReaderTreePage page, LocalMemoryReaderFeature feature, int start)
+    private static MemoryReaderTreeApiResponse TreeSlice(MemoryReaderTreePage page, LocalMemoryReaderFeature feature, string area, int start)
     {
         var flattened = Flatten(page.Roots).ToArray();
         const int size = 32;
         // A continuation is a flat reader list: returning descendants here would duplicate them on later portions.
         var roots = flattened.Skip(start).Take(size).Select(node => new MemoryReaderTreeNodeDto(
-            node.Node.Kind, node.Node.Label, node.Node.Locator, node.Node.Href, node.Node.LinkWeight, node.Node.ItemCount, [], node.Key, node.ParentKey, node.Depth)).ToArray();
-        var next = start + roots.Length < flattened.Length ? feature.ProtectTreeContinuation(start + roots.Length) : null;
+            node.Node.Kind, node.Node.Label, node.Node.Locator, node.Node.Href is null ? null : WithArea(node.Node.Href, area), node.Node.LinkWeight, node.Node.ItemCount, [], node.Key, node.ParentKey, node.Depth)).ToArray();
+        var next = start + roots.Length < flattened.Length ? feature.ProtectTreeContinuation(page.GenerationKey!, start + roots.Length, area) : null;
         return new("available", roots, next);
     }
 
@@ -198,6 +225,7 @@ public static class MemoryReaderEndpoint
     private static MemoryReaderApiResponse ToApiResponse(
         MemoryReaderDocumentPage page,
         LocalMemoryReaderFeature feature,
+        string area,
         MemoryWikiMetadata? metadata = null,
         IReadOnlyList<LocalMemoryReaderFeature.MemoryReaderWikiRelation>? children = null,
         IReadOnlyList<LocalMemoryReaderFeature.MemoryReaderWikiRelation>? related = null,
@@ -209,40 +237,45 @@ public static class MemoryReaderEndpoint
             metadata?.Title ?? page.Blocks.FirstOrDefault(block => !string.IsNullOrWhiteSpace(block.Heading))?.Heading ?? "Запись памяти",
             metadata?.Namespace ?? "inbox",
             metadata?.Tags ?? [],
-            ToRelationDtos(children), ToRelationDtos(related), ToRelationDtos(backlinks),
+            ToRelationDtos(children, area), ToRelationDtos(related, area), ToRelationDtos(backlinks, area),
             page.Blocks.Select(block => new MemoryReaderBlockDto(
-                feature.ProtectBlock(page.RouteKey, block.BlockKey),
+                feature.ProtectBlock(page.RouteKey, block.BlockKey, area),
                 block.Heading,
                 block.Content.Select(inline => inline.Kind == MemoryReaderInlineKind.Link &&
                                              inline.RouteKey is not null && inline.BlockKey is not null
-                    ? new MemoryReaderInlineDto("link", inline.Text, inline.RouteKey, feature.ProtectBlock(inline.RouteKey, inline.BlockKey))
+                    ? new MemoryReaderInlineDto("link", inline.Text, inline.RouteKey, feature.ProtectBlock(inline.RouteKey, inline.BlockKey, area))
                     : new MemoryReaderInlineDto("text", inline.Text, null, null)).ToArray())).ToArray(),
-            feature.ProtectContinuation(page.RouteKey, page.NextCursor)),
+                feature.ProtectContinuation(page.RouteKey, page.NextCursor, area)),
         MemoryReaderDocumentState.NotFound => MemoryReaderApiResponse.NotFound,
         MemoryReaderDocumentState.Changed => MemoryReaderApiResponse.Changed,
         _ => MemoryReaderApiResponse.Unavailable
     };
 
-    private static IReadOnlyList<MemoryReaderRelationDto> ToRelationDtos(IReadOnlyList<LocalMemoryReaderFeature.MemoryReaderWikiRelation>? relations) =>
-        (relations ?? []).Select(relation => new MemoryReaderRelationDto(relation.Href, relation.Kind, relation.Label, relation.Title, relation.Namespace, relation.SharedEntityCount)).ToArray();
+    private static IReadOnlyList<MemoryReaderRelationDto> ToRelationDtos(IReadOnlyList<LocalMemoryReaderFeature.MemoryReaderWikiRelation>? relations, string? area = null) =>
+        (relations ?? []).Select(relation => new MemoryReaderRelationDto(WithArea(relation.Href, area), relation.Kind, relation.Label, relation.Title, relation.Namespace, relation.SharedEntityCount)).ToArray();
 
     private static MemoryReaderCatalogApiResponse ToCatalogApiResponse(
         MemoryReaderCatalogPage page,
         LocalMemoryReaderFeature feature,
-        MemoryReaderCatalogFilter filter) => page.State switch
+        MemoryReaderCatalogFilter filter,
+        string area) => page.State switch
     {
         MemoryReaderCatalogState.Available => new("available", page.Documents.Select(document => new MemoryReaderCatalogDocumentDto(
-            document.RecordHref, document.Type.ToString(), document.Title, document.Namespace, document.Tags,
+            WithArea(document.RecordHref, area), document.Type.ToString(), document.Title, document.Namespace, document.Tags,
             document.Preview, document.UpdatedAt)).ToArray(),
             page.Namespaces.Select(facet => new MemoryReaderCatalogFacetDto(facet.Locator, facet.Label, facet.Count)).ToArray(),
             page.Tags.Select(facet => new MemoryReaderCatalogFacetDto(facet.Locator, facet.Label, facet.Count)).ToArray(),
-            feature.ProtectCatalogContinuation(page.NextCursor, filter)),
+            feature.ProtectCatalogContinuation(page.NextCursor, filter, area)),
         MemoryReaderCatalogState.NotFound => MemoryReaderCatalogApiResponse.NotFound,
         MemoryReaderCatalogState.Changed => MemoryReaderCatalogApiResponse.Changed,
         MemoryReaderCatalogState.Stale => MemoryReaderCatalogApiResponse.Stale,
         MemoryReaderCatalogState.CatalogNotReady => MemoryReaderCatalogApiResponse.NotReady,
         _ => MemoryReaderCatalogApiResponse.Unavailable
     };
+
+    private static string WithArea(string href, string? area) => string.IsNullOrWhiteSpace(area)
+        ? href
+        : string.Concat(href, href.Contains('?', StringComparison.Ordinal) ? "&area=" : "?area=", Uri.EscapeDataString(area));
 }
 
 /// <summary>Content delivery is intentional; this DTO still omits scope, actor, provenance and durable IDs.</summary>
@@ -264,6 +297,8 @@ public sealed record MemoryReaderApiResponse(
     public static MemoryReaderApiResponse Stale { get; } = new("stale", null, null, null, [], [], [], [], [], null);
 }
 
+public sealed record MemoryReaderAreasApiResponse(string Status, IReadOnlyList<MemoryReaderAreaDto> Areas);
+
 public sealed record MemoryReaderBlockDto(string Id, string? Heading, IReadOnlyList<MemoryReaderInlineDto> Content);
 public sealed record MemoryReaderInlineDto(string Kind, string Text, string? RouteKey, string? BlockToken);
 public sealed record MemoryReaderRelationDto(string Href, string Kind, string Label, string Title, string Namespace, int SharedEntityCount);
@@ -284,11 +319,13 @@ public sealed record MemoryReaderTreeApiResponse(string Status, IReadOnlyList<Me
 {
     public static MemoryReaderTreeApiResponse Unavailable { get; } = new("unavailable", []);
     public static MemoryReaderTreeApiResponse NotReady { get; } = new("catalog-not-ready", []);
+    public static MemoryReaderTreeApiResponse Changed { get; } = new("changed", []);
 }
 
 public sealed record MemoryReaderTagApiResponse(string Status, IReadOnlyList<MemoryReaderCatalogFacetDto> Tags, string? NextToken)
 {
     public static MemoryReaderTagApiResponse Unavailable { get; } = new("unavailable", [], null);
+    public static MemoryReaderTagApiResponse Changed { get; } = new("changed", [], null);
 }
 
 public sealed record MemoryReaderCatalogApiResponse(
@@ -324,6 +361,16 @@ internal sealed class MemoryReaderJsonResult(MemoryReaderApiResponse response) :
         context.Response.ContentType = "application/json; charset=utf-8";
         await JsonSerializer.SerializeAsync(context.Response.Body, response, response.GetType(), JsonOptions,
             context.RequestAborted).ConfigureAwait(false);
+    }
+}
+
+internal sealed class MemoryReaderAreasJsonResult(MemoryReaderAreasApiResponse response) : IResult
+{
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    public async Task ExecuteAsync(HttpContext context)
+    {
+        context.Response.ContentType = "application/json; charset=utf-8";
+        await JsonSerializer.SerializeAsync(context.Response.Body, response, JsonOptions, context.RequestAborted).ConfigureAwait(false);
     }
 }
 

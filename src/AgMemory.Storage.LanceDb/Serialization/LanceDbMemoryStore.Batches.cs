@@ -70,6 +70,19 @@ public sealed partial class LanceDbMemoryStore
         ], rows.Length);
     }
 
+    private static RecordBatch BuildUsageAuditEventBatch(IReadOnlyCollection<UsageAuditEvent> usageEvents)
+    {
+        var rows = usageEvents.Select(PersistedUsageAuditEventRow.From).ToArray();
+        return new RecordBatch(CreateUsageAuditEventsSchema(),
+        [
+            Strings(rows.Select(row => row.EventId)), Strings(rows.Select(row => row.OccurredAtUtc)), Strings(rows.Select(row => row.SchemaVersion)),
+            Strings(rows.Select(row => row.Source)), Strings(rows.Select(row => row.Operation)), Strings(rows.Select(row => row.ClientLabel)),
+            Strings(rows.Select(row => row.AreaId)), Strings(rows.Select(row => row.QueryHash)), Strings(rows.Select(row => row.QueryLengthChars)),
+            Strings(rows.Select(row => row.ResultCount)), Strings(rows.Select(row => row.SelectedContextChars)), Strings(rows.Select(row => row.DeliveredTokensEstimate)),
+            Strings(rows.Select(row => row.EstimationMethodVersion)), Strings(rows.Select(row => row.Outcome)), Strings(rows.Select(row => row.FailureClass))
+        ], rows.Length);
+    }
+
     private static RecordBatch BuildReaderRouteBatch(IReadOnlyCollection<PersistedReaderRouteRow> routes)
     {
         return new RecordBatch(CreateReaderRouteSchema(),
@@ -181,6 +194,11 @@ public sealed partial class LanceDbMemoryStore
     private static IEnumerable<IdempotencyReceipt> ReadReceiptRows(RecordBatch batch)
     {
         for (var index = 0; index < batch.Length; index++) yield return PersistedReceiptRow.Read(batch, index).ToReceipt();
+    }
+
+    private static IEnumerable<UsageAuditEvent> ReadUsageAuditEvents(RecordBatch batch)
+    {
+        for (var index = 0; index < batch.Length; index++) yield return PersistedUsageAuditEventRow.Read(batch, index).ToUsageAuditEvent();
     }
 
     private async Task<PersistedSchemaManifestRow?> ReadSchemaManifestRowAsync(string tableName, CancellationToken cancellationToken)

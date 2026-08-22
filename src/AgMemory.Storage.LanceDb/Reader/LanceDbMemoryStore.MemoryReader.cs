@@ -5,6 +5,24 @@ namespace AgMemory.Storage.LanceDb;
 
 public sealed partial class LanceDbMemoryStore
 {
+    /// <summary>Reads a capped selected-column set for the records browser; it never materialises MemoryRecord.</summary>
+    public async Task<IReadOnlyList<MemoryRecordBrowserSourceRecord>> ReadAsync(MemoryRecordBrowserSourceRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(request.Eligibility);
+        ThrowIfDisposed();
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            using var table = await OpenTableAsync(RecordsTable, cancellationToken).ConfigureAwait(false);
+            var batches = await table.Query().Select(ReaderSourceColumnNames).Where(BuildEligibilityPredicate(request.Eligibility))
+                .Limit(MemoryRecordBrowserLimits.MaximumSourceRecords).ToArrow().ConfigureAwait(false);
+            return ReadMemoryReaderSourceRecords(batches).Where(record => IsReaderEligible(record, request.Eligibility))
+                .Select(record => new MemoryRecordBrowserSourceRecord(record.MemoryId, record.Scope, record.Type, record.Status, record.CanonicalText, record.UpdatedAt, record.Version, record.ExpiresAt, record.Entities)).ToArray();
+        }
+        finally { _gate.Release(); }
+    }
     /// <summary>
     /// Reads one content-bearing document through an exact-scope, active and non-expired selected projection.
     /// The projection deliberately excludes embeddings, provenance, entities and every general materializer field.

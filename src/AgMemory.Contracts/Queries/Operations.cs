@@ -14,5 +14,6 @@ public enum MemoryOperation
     ReadHotMemory,
     GraphRead,
     ReaderRead,
-    ReaderCatalogRead
+    ReaderCatalogRead,
+    RecordBrowserRead
 }

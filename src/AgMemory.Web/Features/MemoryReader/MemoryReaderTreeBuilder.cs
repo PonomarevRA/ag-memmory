@@ -150,7 +150,7 @@ public sealed record MemoryReaderTreeNode(
     int? ItemCount,
     IReadOnlyList<MemoryReaderTreeNode> Children);
 
-public sealed record MemoryReaderTreePage(string Status, IReadOnlyList<MemoryReaderTreeNode> Roots)
+public sealed record MemoryReaderTreePage(string Status, IReadOnlyList<MemoryReaderTreeNode> Roots, string? GenerationKey = null)
 {
     public static MemoryReaderTreePage NotReady { get; } = new("catalog-not-ready", []);
     public static MemoryReaderTreePage Empty { get; } = new("available", []);

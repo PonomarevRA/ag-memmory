@@ -2,6 +2,7 @@ using AgMemory.Web.Features.Antiforgery;
 using AgMemory.Web.Features.AppVersion;
 using AgMemory.Web.Features.Chat;
 using AgMemory.Web.Features.MemoryGraph;
+using AgMemory.Web.Features.MemoryExperience;
 using AgMemory.Web.Features.MemoryReader;
 using AgMemory.Web.Features.MemoryStatus;
 using AgMemory.Web.Gateway;
@@ -40,6 +41,8 @@ builder.Services.AddRateLimiter(options =>
         }));
 });
 builder.Services.Configure<ModelGatewayOptions>(builder.Configuration.GetSection(ModelGatewayOptions.SectionName));
+// These switches are server-only: nothing in the SPA configuration may expose them.
+builder.Services.Configure<MemoryExperienceOptions>(builder.Configuration.GetSection(MemoryExperienceOptions.SectionName));
 builder.Services.AddHttpClient(OpenAiCompatibleChatGateway.HttpClientName, client =>
 {
     client.Timeout = TimeSpan.FromSeconds(45);
@@ -87,15 +90,20 @@ app.MapGet(MemoryGraphEndpoint.Route, (HttpContext context, string? continuation
     LocalMemoryGraphFeature feature, CancellationToken cancellationToken) =>
     MemoryGraphEndpoint.HandleAsync(context, environment, feature, cancellationToken, continuation));
 app.MapGet(MemoryStatusEndpoint.Route, MemoryStatusEndpoint.HandleAsync);
-app.MapGet(MemoryReaderEndpoint.CatalogRoute, (HttpContext context, string? continuation, string? @namespace, string? tag, string? search,
+app.MapGet(MemoryRecordBrowserEndpoint.Route, MemoryRecordBrowserEndpoint.HandleAsync);
+app.MapGet(MemoryReaderEndpoint.AreasRoute, MemoryReaderEndpoint.HandleAreas);
+app.MapGet(MemoryReaderEndpoint.CatalogRoute, (HttpContext context, string? continuation, string? @namespace, string? tag, string? search, string? area,
     IHostEnvironment environment, LocalMemoryReaderFeature feature, CancellationToken cancellationToken) =>
-    MemoryReaderEndpoint.HandleCatalogAsync(context, continuation, @namespace, tag, search, environment, feature, cancellationToken));
-app.MapGet(MemoryReaderEndpoint.HomeRoute, MemoryReaderEndpoint.HandleHomeAsync);
-app.MapGet(MemoryReaderEndpoint.TreeRoute, (HttpContext context, string? continuation, IHostEnvironment environment,
+    MemoryReaderEndpoint.HandleCatalogAsync(context, continuation, @namespace, tag, search, environment, feature, cancellationToken, area));
+app.MapGet(MemoryReaderEndpoint.HomeRoute, (HttpContext context, string? area, IHostEnvironment environment, LocalMemoryReaderFeature feature, CancellationToken cancellationToken) =>
+    MemoryReaderEndpoint.HandleHomeAsync(context, environment, feature, cancellationToken, area));
+app.MapGet(MemoryReaderEndpoint.TreeRoute, (HttpContext context, string? continuation, string? area, IHostEnvironment environment,
     LocalMemoryReaderFeature feature, CancellationToken cancellationToken) =>
-    MemoryReaderEndpoint.HandleTreeAsync(context, continuation, environment, feature, cancellationToken));
-app.MapGet(MemoryReaderEndpoint.TagRoute, MemoryReaderEndpoint.HandleTagsAsync);
-app.MapGet(MemoryReaderEndpoint.DocumentRoute, MemoryReaderEndpoint.HandleDocumentAsync);
+    MemoryReaderEndpoint.HandleTreeAsync(context, continuation, environment, feature, cancellationToken, area));
+app.MapGet(MemoryReaderEndpoint.TagRoute, (HttpContext context, string? continuation, string? area, IHostEnvironment environment, LocalMemoryReaderFeature feature, CancellationToken cancellationToken) =>
+    MemoryReaderEndpoint.HandleTagsAsync(context, continuation, environment, feature, cancellationToken, area));
+app.MapGet(MemoryReaderEndpoint.DocumentRoute, (HttpContext context, string routeKey, string? block, string? area, IHostEnvironment environment, LocalMemoryReaderFeature feature, CancellationToken cancellationToken) =>
+    MemoryReaderEndpoint.HandleDocumentAsync(context, routeKey, block, environment, feature, cancellationToken, area));
 app.MapFallback(context =>
 {
     if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))

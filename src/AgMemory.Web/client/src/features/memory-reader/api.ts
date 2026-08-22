@@ -12,13 +12,30 @@ import {
 } from './sanitize.js';
 import { safeText } from '@shared/fetch.js';
 
-export async function load(routeKey?: string | null, token?: string | null): Promise<MemoryReaderDocument> {
+export async function load(routeKey?: string | null, token?: string | null, area?: string | null): Promise<MemoryReaderDocument> {
   const route =
     typeof routeKey === 'string' && routeKey.length > 0
       ? `/api/memory-reader/${encodeURIComponent(routeKey)}${typeof token === 'string' && token.length > 0 ? `?block=${encodeURIComponent(token)}` : ''}`
       : HOME_ROUTE;
-  const payload = await fetchJson<unknown>(route);
+  const payload = await fetchJson<unknown>(withArea(route, area));
   return payload ? safeDocumentResponse(payload) : unavailableDocument();
+}
+
+export type ReaderArea = { id: string; label: string; isDefault: boolean };
+export async function loadAreas(): Promise<ReaderArea[]> {
+  const payload = await fetchJson<Record<string, unknown>>('/api/memory-reader/areas');
+  if (!payload || payload.status !== 'available' || !Array.isArray(payload.areas)) return [];
+  return payload.areas.flatMap(value => {
+    const row = value as Record<string, unknown>;
+    const id = safeText(row.id, 64); const label = safeText(row.label, 120);
+    return id && /^[a-z][a-z0-9-]{0,63}$/.test(id) && label && typeof row.isDefault === 'boolean' ? [{ id, label, isDefault: row.isDefault }] : [];
+  }).slice(0, 50);
+}
+
+function withArea(route: string, area?: string | null): string {
+  if (!area) return route;
+  const separator = route.includes('?') ? '&' : '?';
+  return `${route}${separator}area=${encodeURIComponent(area)}`;
 }
 
 export type CatalogResponse = {
@@ -41,12 +58,13 @@ function safeFacet(value: unknown, isValidLocator: (locator: string) => boolean)
   return locator && isValidLocator(locator) && label && count !== null ? { locator, label, count } : null;
 }
 
-export async function loadCatalog(token?: string | null, namespaceValue?: string | null, tag?: string | null, search?: string | null): Promise<CatalogResponse> {
+export async function loadCatalog(token?: string | null, namespaceValue?: string | null, tag?: string | null, search?: string | null, area?: string | null): Promise<CatalogResponse> {
   const parameters = new URLSearchParams();
   if (typeof token === 'string' && token.length > 0) parameters.set('continuation', token);
   if (typeof namespaceValue === 'string' && namespaceValue.length > 0) parameters.set('namespace', namespaceValue);
   if (typeof tag === 'string' && tag.length > 0) parameters.set('tag', tag);
   if (typeof search === 'string' && search.length > 0) parameters.set('search', search);
+  if (typeof area === 'string' && area.length > 0) parameters.set('area', area);
   const route = parameters.size > 0 ? `${HOME_ROUTE}?${parameters.toString()}` : HOME_ROUTE;
   const payload = await fetchJson<Record<string, unknown>>(route);
   if (!payload || !CATALOG_STATUS.has(String(payload.status))) return catalogUnavailable();
@@ -120,16 +138,16 @@ function safeTreeNode(value: unknown, depth: number): TreeNode | null {
   return { kind, label, locator, href, linkWeight, itemCount, children, nodeKey, parentKey, depth: nodeDepth };
 }
 
-export async function loadTree(token?: string | null): Promise<{ status: string; roots: TreeNode[]; nextToken: string | null }> {
-  const payload = await fetchJson<Record<string, unknown>>(token ? `${TREE_ROUTE}?continuation=${encodeURIComponent(token)}` : TREE_ROUTE);
+export async function loadTree(token?: string | null, area?: string | null): Promise<{ status: string; roots: TreeNode[]; nextToken: string | null }> {
+  const payload = await fetchJson<Record<string, unknown>>(withArea(token ? `${TREE_ROUTE}?continuation=${encodeURIComponent(token)}` : TREE_ROUTE, area));
   if (!payload || !TREE_STATUS.has(String(payload.status))) return treeUnavailable();
   if (payload.status !== 'available' || !Array.isArray(payload.roots)) return treeUnavailable(String(payload.status));
   const roots = payload.roots.map(node => safeTreeNode(node, 0)).filter((node): node is TreeNode => node !== null).slice(0, 256);
   return { status: 'available', roots, nextToken: payload.nextToken === null ? null : safeText(payload.nextToken, 4096) };
 }
 
-export async function loadTags(token?: string | null): Promise<{ status: string; tags: CatalogResponse['tags']; nextToken: string | null }> {
-  const payload = await fetchJson<Record<string, unknown>>(token ? `/api/memory-reader/tags?continuation=${encodeURIComponent(token)}` : '/api/memory-reader/tags');
+export async function loadTags(token?: string | null, area?: string | null): Promise<{ status: string; tags: CatalogResponse['tags']; nextToken: string | null }> {
+  const payload = await fetchJson<Record<string, unknown>>(withArea(token ? `/api/memory-reader/tags?continuation=${encodeURIComponent(token)}` : '/api/memory-reader/tags', area));
   if (!payload || payload.status !== 'available' || !Array.isArray(payload.tags)) return { status: 'unavailable', tags: [], nextToken: null };
   return { status: 'available', tags: payload.tags.map(item => safeFacet(item, isSafeTagLocator)).filter(Boolean).slice(0, 12) as CatalogResponse['tags'], nextToken: payload.nextToken === null ? null : safeText(payload.nextToken, 4096) };
 }
