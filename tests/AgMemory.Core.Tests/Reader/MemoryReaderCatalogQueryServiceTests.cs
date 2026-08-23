@@ -39,6 +39,21 @@ public sealed class MemoryReaderCatalogQueryServiceTests
         Assert.Equal("/memory-reader/route-first", document.RecordHref);
     }
 
+    [Fact]
+    public async Task Browse_HidesUncuratedEventsAndBlankFallbackRecords()
+    {
+        var curated = Record("first", MemoryRecordType.Fact, ["shared"]);
+        var transportEvent = Record("transport-event", MemoryRecordType.Event, []) with { CanonicalText = string.Empty };
+        var blankOutcome = Record("blank-outcome", MemoryRecordType.Outcome, []) with { CanonicalText = "  \r\n" };
+        var service = Service(new CatalogSource([curated, transportEvent, blankOutcome]));
+
+        var page = await service.BrowseAsync(new(Actor, Scope, null, MemoryReaderCatalogFilter.Empty, Version), default);
+
+        var document = Assert.Single(page.Documents);
+        Assert.Equal("First article", document.Title);
+        Assert.DoesNotContain(page.Namespaces, facet => facet.Locator == "inbox");
+    }
+
     [Theory]
     [InlineData("engineering/core", null, true)]
     [InlineData("", "", true)]

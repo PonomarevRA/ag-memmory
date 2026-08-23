@@ -3,6 +3,22 @@ version: 1
 area: memory-reader
 kind: outcome
 objects:
+  - id: memory-reader.outcome.curated-catalog-visibility
+    title: Hide uncurated transport records from the Wiki catalogue
+    status: completed
+    summary: Reader cards require curated metadata or meaningful fallback content; empty inbox transport rows stay hidden.
+    path: curated-catalog-visibility.a2a.yaml
+    tags: [memory-reader, wiki, catalog, inbox, privacy]
+    recorded: "2026-08-23"
+    updated: "2026-08-23"
+  - id: memory-reader.outcome.derived-shared-entity-relations
+    title: Projected bounded weighted relations from shared entities
+    status: completed
+    summary: Wiki derives safe weighted related-page links from shared entities and keeps curated links authoritative.
+    path: derived-shared-entity-relations.a2a.yaml
+    tags: [memory-reader, wiki, relations, graph, privacy]
+    recorded: "2026-08-23"
+    updated: "2026-08-23"
   - id: memory-reader.outcome.legacy-relation-schema-migration
     title: Migrated the legacy reader relation cache schema
     status: completed

@@ -8,6 +8,9 @@ namespace AgMemory.Storage.LanceDb;
 
 public sealed partial class LanceDbMemoryStore
 {
+    // Changing this state invalidates only derived reader projections, never durable memory records.
+    private const string ReadyCatalogGenerationState = "Ready:shared-entity-related-v1";
+
     public async Task<MemoryReaderCatalogBuildPortion> ReadBuildPortionAsync(
         MemoryReaderCatalogBuildRequest request,
         CancellationToken cancellationToken)
@@ -45,9 +48,9 @@ public sealed partial class LanceDbMemoryStore
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
             var scope = eligibility.AuthorizedScopes.Selectors[0].Scope;
             var ready = await ReadCatalogGenerationAsync(scope, cancellationToken).ConfigureAwait(false);
-            if (ready is null || !string.Equals(ready.State, "Ready", StringComparison.Ordinal))
+            if (ready is null || !IsReadyCatalogGeneration(ready))
                 ready = await BuildReadyCatalogGenerationAsync(scope, eligibility, cancellationToken).ConfigureAwait(false);
-            if (ready is null || !string.Equals(ready.State, "Ready", StringComparison.Ordinal)) return null;
+            if (ready is null || !IsReadyCatalogGeneration(ready)) return null;
             if (cursor is not null && !string.Equals(cursor.GenerationKey, ready.GenerationKey, StringComparison.Ordinal)) return null;
 
             var start = cursor?.NextLeafPosition ?? 0;
@@ -117,7 +120,7 @@ public sealed partial class LanceDbMemoryStore
         CancellationToken cancellationToken)
     {
         var previous = await ReadCatalogGenerationAsync(scope, cancellationToken).ConfigureAwait(false);
-        if (previous is not null && !string.Equals(previous.State, "Ready", StringComparison.Ordinal))
+        if (previous is not null && !IsReadyCatalogGeneration(previous))
             await DeleteCatalogBuildRunRowsAsync(previous.GenerationKey, cancellationToken).ConfigureAwait(false);
 
         var now = DateTimeOffset.UtcNow;
@@ -150,12 +153,15 @@ public sealed partial class LanceDbMemoryStore
             await PersistCatalogLeavesFromRunAsync(generation, merged, cancellationToken).ConfigureAwait(false);
         await BuildWikiLeavesAsync(scope, generation, eligibility, cancellationToken).ConfigureAwait(false);
 
-        var ready = generation with { State = "Ready", ReadyAtUtc = Utc(DateTimeOffset.UtcNow) };
+        var ready = generation with { State = ReadyCatalogGenerationState, ReadyAtUtc = Utc(DateTimeOffset.UtcNow) };
         await PersistCatalogGenerationAsync(ready, cancellationToken).ConfigureAwait(false);
         // Ready leaves are self-contained; cleanup only after their generation pointer is public.
         await DeleteCatalogBuildRunRowsAsync(generation.GenerationKey, CancellationToken.None).ConfigureAwait(false);
         return ready;
     }
+
+    private static bool IsReadyCatalogGeneration(PersistedReaderCatalogGenerationRow generation) =>
+        string.Equals(generation.State, ReadyCatalogGenerationState, StringComparison.Ordinal);
 
     private async Task AddCatalogBuildRunAsync(
         PersistedReaderCatalogGenerationRow generation,
@@ -350,6 +356,7 @@ public sealed partial class LanceDbMemoryStore
     {
         MemoryReaderCatalogBuildCursor? cursor = null;
         var entitiesByMemoryId = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+        var documentsByMemoryId = new Dictionary<string, PersistedReaderWikiDocumentRow>(StringComparer.Ordinal);
         while (true)
         {
             var portion = await ReadCatalogBuildPortionCoreAsync(eligibility, cursor, cancellationToken).ConfigureAwait(false);
@@ -358,9 +365,11 @@ public sealed partial class LanceDbMemoryStore
             {
                 entitiesByMemoryId[record.MemoryId.Value] = NormalizeEntities(record.Entities);
                 var metadata = await ReadWikiMetadataCoreAsync(scope, record.MemoryId, record.Version, cancellationToken).ConfigureAwait(false);
-                documents.Add(new($"{generation.GenerationKey}:{record.MemoryId.Value}", generation.GenerationKey, record.MemoryId.Value,
+                var document = new PersistedReaderWikiDocumentRow($"{generation.GenerationKey}:{record.MemoryId.Value}", generation.GenerationKey, record.MemoryId.Value,
                     record.Version.ToString(CultureInfo.InvariantCulture), metadata?.Title ?? WikiFallbackTitle(record.CanonicalText),
-                    metadata?.Namespace ?? "inbox", metadata?.Slug));
+                    metadata?.Namespace ?? "inbox", metadata?.Slug);
+                documents.Add(document);
+                documentsByMemoryId.Add(record.MemoryId.Value, document);
             }
             await PersistWikiDocumentsAsync(documents, cancellationToken).ConfigureAwait(false);
             if (portion.NextCursor is null) break;
@@ -368,6 +377,9 @@ public sealed partial class LanceDbMemoryStore
         }
 
         var relations = new WikiRelationAccumulator(generation.GenerationKey);
+        // Populate the bounded automatic candidates first. Curated markup is then able to replace an automatic
+        // candidate when necessary, while never displacing another curated relation.
+        AddSharedEntityRelations(relations, entitiesByMemoryId, documentsByMemoryId);
         cursor = null;
         while (true)
         {
@@ -385,13 +397,13 @@ public sealed partial class LanceDbMemoryStore
                     var sharedEntityCount = SharedEntityCount(record.Entities, entitiesByMemoryId.GetValueOrDefault(target.MemoryId));
                     if (link.Groups["kind"].Value == "doc")
                     {
-                        relations.Add(record.MemoryId.Value, target.MemoryId, MemoryWikiRelationKind.Child, label, sharedEntityCount);
-                        relations.Add(target.MemoryId, record.MemoryId.Value, MemoryWikiRelationKind.Backlink, label, sharedEntityCount);
+                        relations.Add(record.MemoryId.Value, target.MemoryId, MemoryWikiRelationKind.Child, label, sharedEntityCount, explicitRelation: true);
+                        relations.Add(target.MemoryId, record.MemoryId.Value, MemoryWikiRelationKind.Backlink, label, sharedEntityCount, explicitRelation: true);
                     }
                     else
                     {
-                        relations.Add(record.MemoryId.Value, target.MemoryId, MemoryWikiRelationKind.Related, label, sharedEntityCount);
-                        relations.Add(target.MemoryId, record.MemoryId.Value, MemoryWikiRelationKind.Related, label, sharedEntityCount);
+                        relations.Add(record.MemoryId.Value, target.MemoryId, MemoryWikiRelationKind.Related, label, sharedEntityCount, explicitRelation: true);
+                        relations.Add(target.MemoryId, record.MemoryId.Value, MemoryWikiRelationKind.Related, label, sharedEntityCount, explicitRelation: true);
                     }
                 }
             }
@@ -401,6 +413,49 @@ public sealed partial class LanceDbMemoryStore
 
         foreach (var batch in relations.Rows().Chunk(MemoryReaderLimits.DocumentsPerPage))
             await PersistWikiRelationsAsync(batch, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Projects the existing graph's shared normalized entities into reader-safe related links. Only a fixed number
+    /// of sorted candidates is inspected per entity, so one common entity cannot turn catalog compilation quadratic.
+    /// </summary>
+    private static void AddSharedEntityRelations(
+        WikiRelationAccumulator relations,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> entitiesByMemoryId,
+        IReadOnlyDictionary<string, PersistedReaderWikiDocumentRow> documentsByMemoryId)
+    {
+        var sourcesByEntity = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+        foreach (var (memoryId, entities) in entitiesByMemoryId)
+        {
+            foreach (var entity in entities)
+            {
+                if (!sourcesByEntity.TryGetValue(entity, out var memoryIds))
+                {
+                    memoryIds = new(StringComparer.Ordinal);
+                    sourcesByEntity.Add(entity, memoryIds);
+                }
+                memoryIds.Add(memoryId);
+            }
+        }
+
+        foreach (var (source, sourceEntities) in entitiesByMemoryId.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            var candidates = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var entity in sourceEntities.OrderBy(value => value, StringComparer.Ordinal))
+            {
+                if (!sourcesByEntity.TryGetValue(entity, out var targets)) continue;
+                foreach (var target in targets.Where(target => !string.Equals(target, source, StringComparison.Ordinal))
+                             .Take(MemoryWikiLimits.MaximumRelatedPerDocument))
+                    candidates.Add(target);
+            }
+
+            foreach (var target in candidates.Take(MemoryWikiLimits.MaximumRelatedPerDocument))
+            {
+                var sharedEntityCount = SharedEntityCount(sourceEntities, entitiesByMemoryId[target]);
+                if (sharedEntityCount <= 0 || !documentsByMemoryId.TryGetValue(target, out var document)) continue;
+                relations.Add(source, target, MemoryWikiRelationKind.Related, document.Title, sharedEntityCount);
+            }
+        }
     }
 
     private static string WikiFallbackTitle(string text)
@@ -422,6 +477,9 @@ public sealed partial class LanceDbMemoryStore
         return NormalizeEntities(source).Count(target.Contains);
     }
 
+    private static int SharedEntityCount(IReadOnlySet<string> source, IReadOnlySet<string>? target) =>
+        target is null || target.Count == 0 ? 0 : source.Count(target.Contains);
+
     private static PersistedReaderWikiRelationRow WikiRelation(string generation, string source, string target, MemoryWikiRelationKind kind, string label, int sharedEntityCount) =>
         new(Hash($"{generation}\u001f{source}\u001f{target}\u001f{kind}"), generation, source, target, kind.ToString(), label,
             sharedEntityCount.ToString(CultureInfo.InvariantCulture));
@@ -433,7 +491,8 @@ public sealed partial class LanceDbMemoryStore
         private readonly Dictionary<string, RelationBucket> _related = new(StringComparer.Ordinal);
         private readonly Dictionary<string, RelationBucket> _backlinks = new(StringComparer.Ordinal);
 
-        public void Add(string source, string target, MemoryWikiRelationKind kind, string label, int sharedEntityCount = 0)
+        public void Add(string source, string target, MemoryWikiRelationKind kind, string label, int sharedEntityCount = 0,
+            bool explicitRelation = false)
         {
             var buckets = kind switch
             {
@@ -451,7 +510,7 @@ public sealed partial class LanceDbMemoryStore
                 bucket = new(cap);
                 buckets.Add(source, bucket);
             }
-            bucket.Add(target, kind, label, sharedEntityCount);
+            bucket.Add(target, kind, label, sharedEntityCount, explicitRelation);
         }
 
         public IEnumerable<PersistedReaderWikiRelationRow> Rows()
@@ -476,24 +535,45 @@ public sealed partial class LanceDbMemoryStore
 
             public IEnumerable<Candidate> Values => _relations.Values;
 
-            public void Add(string target, MemoryWikiRelationKind kind, string label, int sharedEntityCount)
+            public void Add(string target, MemoryWikiRelationKind kind, string label, int sharedEntityCount, bool explicitRelation)
             {
                 // Each relation kind has its own target budget; labels arbitrate repeated explicit links.
                 var key = target;
                 if (_relations.TryGetValue(key, out var existing))
                 {
-                    if (string.CompareOrdinal(label, existing.Label) < 0)
-                        _relations[key] = existing with { Label = label, SharedEntityCount = sharedEntityCount };
+                    if (explicitRelation && !existing.Explicit ||
+                        explicitRelation == existing.Explicit && string.CompareOrdinal(label, existing.Label) < 0)
+                        _relations[key] = existing with { Label = label, SharedEntityCount = sharedEntityCount, Explicit = explicitRelation };
                     return;
                 }
 
-                if (_relations.Count == cap && string.CompareOrdinal(key, _relations.Last().Key) >= 0) return;
-                if (_relations.Count == cap) _relations.Remove(_relations.Last().Key);
-                _relations.Add(key, new(target, kind, label, sharedEntityCount));
+                if (_relations.Count == cap)
+                {
+                    // Curated wiki grammar has priority over the automatic graph projection when a page is full.
+                    var largestAutomatic = _relations.Values
+                        .Where(candidate => !candidate.Explicit)
+                        .OrderBy(candidate => candidate.Target, StringComparer.Ordinal)
+                        .LastOrDefault();
+                    if (largestAutomatic is not null)
+                    {
+                        // A curated link always outranks an automatic candidate, regardless of its lexical key.
+                        if (!explicitRelation && string.CompareOrdinal(key, largestAutomatic.Target) >= 0) return;
+                        _relations.Remove(largestAutomatic.Target);
+                    }
+                    else if (explicitRelation)
+                    {
+                        // Between equally curated candidates retain the deterministic lexical bounded set.
+                        var largestCurated = _relations.Values.OrderBy(candidate => candidate.Target, StringComparer.Ordinal).Last();
+                        if (string.CompareOrdinal(key, largestCurated.Target) >= 0) return;
+                        _relations.Remove(largestCurated.Target);
+                    }
+                    else return;
+                }
+                _relations.Add(key, new(target, kind, label, sharedEntityCount, explicitRelation));
             }
         }
 
-        private sealed record Candidate(string Target, MemoryWikiRelationKind Kind, string Label, int SharedEntityCount);
+        private sealed record Candidate(string Target, MemoryWikiRelationKind Kind, string Label, int SharedEntityCount, bool Explicit);
     }
 
     private async Task<PersistedReaderWikiDocumentRow?> ReadWikiDocumentBySlugCoreAsync(string generation, string @namespace, string slug, CancellationToken cancellationToken)

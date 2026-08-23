@@ -11,14 +11,18 @@ public enum ChatGatewayErrorCode
     Interrupted
 }
 
-public enum ChatGatewayEventKind { Text, Error, Complete }
+public enum ChatGatewayEventKind { Text = 0, Error = 1, Memory = 2, Complete = 3 }
+
+/// <summary>Browser-safe recall unit without record ids, routes or scope values.</summary>
+public sealed record ChatMemoryComponent(string Type, string Title, string Preview);
 
 /// <summary>Browser-safe chat event that intentionally excludes provider diagnostics.</summary>
 public sealed record ChatGatewayEvent(
     ChatGatewayEventKind Kind,
     string? Text = null,
     ChatGatewayErrorCode? ErrorCode = null,
-    bool IsDemo = false);
+    bool IsDemo = false,
+    ChatMemoryComponent? Memory = null);
 
 /// <summary>Browser request containing only an opaque local thread id and current prompt.</summary>
 public sealed record ChatApiRequest(string ThreadId, string Prompt);

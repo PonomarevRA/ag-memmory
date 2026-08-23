@@ -1,0 +1,19 @@
+schema: agent-memory-object/v1
+id: memory-reader.outcome.curated-catalog-visibility
+kind: outcome
+area: memory-reader
+status: completed
+title: Hide uncurated transport records from the Wiki catalogue
+summary: The reader catalogue excludes uncurated Event records and blank fallback records, so it never presents non-opening "Запись без текста" cards.
+recorded: "2026-08-23"
+updated: "2026-08-23"
+tags: [memory-reader, wiki, catalog, inbox, privacy]
+sources:
+  - kind: code
+    ref: src/AgMemory.Core/Reader/MemoryReaderCatalogQueryService.cs
+  - kind: test
+    ref: tests/AgMemory.Core.Tests/Reader/MemoryReaderCatalogQueryServiceTests.cs
+payload:
+  change: Events require Wiki metadata and fallback records require nonblank preview text before the reader exposes a card.
+  result: A local catalogue containing only uncurated empty records returns an empty state instead of inbox placeholder cards.
+  next_action: Create or curate Wiki metadata and meaningful content before expecting a visible document card.

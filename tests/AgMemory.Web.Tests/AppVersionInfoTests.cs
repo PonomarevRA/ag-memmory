@@ -20,8 +20,8 @@ public sealed class AppVersionInfoTests
     public void From_web_assembly_matches_the_product_version()
     {
         var info = AppVersionInfo.From(typeof(Program).Assembly);
-        Assert.Equal("1.1.0", info.Version);
-        Assert.StartsWith("1.1.0", info.InformationalVersion, StringComparison.Ordinal);
+        Assert.Equal("1.2.0", info.Version);
+        Assert.StartsWith("1.2.0", info.InformationalVersion, StringComparison.Ordinal);
     }
 
     private static Assembly AssemblyWithInformationalVersion(string informationalVersion)

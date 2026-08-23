@@ -34,7 +34,7 @@ public sealed partial class LanceDbMemoryStore
 
             var scope = eligibility.AuthorizedScopes.Selectors[0].Scope;
             var generation = await ReadCatalogGenerationAsync(scope, cancellationToken).ConfigureAwait(false);
-            if (generation is null || !string.Equals(generation.State, "Ready", StringComparison.Ordinal)) return null;
+            if (generation is null || !IsReadyCatalogGeneration(generation)) return null;
             var document = await ReadWikiDocumentCoreAsync(generation.GenerationKey, source, cancellationToken).ConfigureAwait(false);
             if (document is null || !long.TryParse(document.RecordVersion, CultureInfo.InvariantCulture, out var documentVersion) ||
                 documentVersion != expectedVersion) return null;

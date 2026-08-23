@@ -59,9 +59,15 @@ public static class ChatEndpoint
         try
         {
             await memory.RememberAsync(request!.ThreadId, "user", request.Prompt, cancellationToken).ConfigureAwait(false);
-            var memoryContext = await memory.RecallAsync(request.Prompt, cancellationToken).ConfigureAwait(false);
+            var recall = await memory.RecallDetailedAsync(request.Prompt, cancellationToken).ConfigureAwait(false);
+            if (recall?.Components is { Count: > 0 } components)
+            {
+                foreach (var component in components)
+                    await WriteEventAsync(context, new(ChatGatewayEventKind.Memory, Memory: component), cancellationToken);
+            }
+
             var answer = new StringBuilder();
-            await foreach (var item in gateway.StreamAsync(new(request.ThreadId, request.Prompt, memoryContext), cancellationToken))
+            await foreach (var item in gateway.StreamAsync(new(request.ThreadId, request.Prompt, recall?.LlmContext), cancellationToken))
             {
                 if (item.Kind == ChatGatewayEventKind.Text && item.Text is not null) answer.Append(item.Text);
                 await WriteEventAsync(context, item, cancellationToken);

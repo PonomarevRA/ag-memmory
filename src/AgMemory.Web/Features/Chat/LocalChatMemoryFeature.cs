@@ -4,6 +4,7 @@ using AgMemory.Contracts;
 using AgMemory.Core;
 using AgMemory.Storage.LanceDb;
 using AgMemory.Web.Features.MemoryGraph;
+using AgMemory.Web.Gateway;
 
 namespace AgMemory.Web.Features.Chat;
 
@@ -28,16 +29,24 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
 
     public async Task<string?> RecallAsync(string prompt, CancellationToken cancellationToken)
     {
+        var result = await RecallDetailedAsync(prompt, cancellationToken).ConfigureAwait(false);
+        return result?.LlmContext;
+    }
+
+    public async Task<LocalChatRecallResult?> RecallDetailedAsync(string prompt, CancellationToken cancellationToken)
+    {
         if (_configuration is null || string.IsNullOrWhiteSpace(prompt))
         {
             SetLastInjectHitCount(0);
             return null;
         }
+
         var runtime = GetOrCreateRuntime(_configuration);
-        var context = await runtime.Query.BuildContextAsync(new MemoryContextRequest(
+        var trimmed = prompt.Trim();
+        var request = new MemoryContextRequest(
             _configuration.Actor,
             _configuration.Scope,
-            prompt.Trim(),
+            trimmed,
             null,
             null,
             SearchLimit: 8,
@@ -45,7 +54,9 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
             RequireCitations: false,
             RetrievalConfigurationVersion: ContractVersion,
             ContextConfigurationVersion: ContractVersion,
-            ContractVersion: ContractVersion), cancellationToken).ConfigureAwait(false);
+            ContractVersion: ContractVersion);
+
+        var context = await runtime.Query.BuildContextAsync(request, cancellationToken).ConfigureAwait(false);
         if (context.Error is not null)
         {
             SetLastInjectHitCount(0);
@@ -54,14 +65,42 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
 
         if (!string.IsNullOrWhiteSpace(context.Content))
         {
+            var records = await LoadRecordsFromContextAsync(runtime.Store, _configuration.Scope, context.Content, cancellationToken)
+                .ConfigureAwait(false);
+            var components = records.Select(ToComponent).ToArray();
             var notes = StripIds(context.Content);
-            SetLastInjectHitCount(notes.Count);
-            return notes.Count == 0 ? null : string.Join("\n", notes);
+            SetLastInjectHitCount(components.Length > 0 ? components.Length : notes.Count);
+            return new(components.Length > 0 ? components : notes.Select(note => ToFallbackComponent(note[2..])).ToArray(),
+                notes.Count == 0 ? null : string.Join("\n", notes));
         }
 
-        var handoff = await ReadHandoffLineAsync(runtime.Store, _configuration.Scope, cancellationToken).ConfigureAwait(false);
-        SetLastInjectHitCount(handoff is null ? 0 : 1);
-        return handoff;
+        var search = await runtime.Query.SearchAsync(new(
+            _configuration.Actor,
+            _configuration.Scope,
+            trimmed,
+            null,
+            null,
+            null,
+            8,
+            ContractVersion,
+            ContractVersion), cancellationToken).ConfigureAwait(false);
+        if (search.Error is null && search.Hits.Count > 0)
+        {
+            var components = search.Hits.Select(hit => ToComponent(hit.Record)).ToArray();
+            var notes = components.Select(component => $"- {component.Preview}").ToArray();
+            SetLastInjectHitCount(components.Length);
+            return new(components, string.Join("\n", notes));
+        }
+
+        var handoff = await ReadHandoffAsync(runtime.Store, _configuration.Scope, cancellationToken).ConfigureAwait(false);
+        if (handoff is null)
+        {
+            SetLastInjectHitCount(0);
+            return null;
+        }
+
+        SetLastInjectHitCount(1);
+        return new([handoff.Value.Component], handoff.Value.LlmLine);
     }
 
     public async Task RememberAsync(string threadId, string role, string content, CancellationToken cancellationToken) =>
@@ -111,6 +150,46 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
         lock (_sync) _lastInjectHitCount = value;
     }
 
+    private static async Task<IReadOnlyList<MemoryRecord>> LoadRecordsFromContextAsync(
+        LanceDbMemoryStore store,
+        MemoryScope scope,
+        string content,
+        CancellationToken cancellationToken)
+    {
+        var scopes = new AuthorizedScopeSet([new ScopeSelector(scope)]);
+        var records = new List<MemoryRecord>();
+        foreach (var id in ParseIds(content))
+        {
+            var record = await store.GetAsync(scopes, id, cancellationToken).ConfigureAwait(false);
+            if (record is not null) records.Add(record);
+        }
+        return records;
+    }
+
+    private static IEnumerable<MemoryId> ParseIds(string content)
+    {
+        foreach (var line in content.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (line.Length <= 2 || line[0] != '[') continue;
+            var end = line.IndexOf("] ", StringComparison.Ordinal);
+            if (end <= 1) continue;
+            yield return new MemoryId(line[1..end]);
+        }
+    }
+
+    private static ChatMemoryComponent ToComponent(MemoryRecord record)
+    {
+        var line = record.CanonicalText.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "Запись памяти";
+        var preview = record.CanonicalText.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        return new(record.Type.ToString(), Bound(line, 120), Bound(preview, MemoryRecordBrowserLimits.MaximumPreviewCharacters));
+    }
+
+    private static ChatMemoryComponent ToFallbackComponent(string preview) =>
+        new("Context", Bound(preview, 120), Bound(preview, MemoryRecordBrowserLimits.MaximumPreviewCharacters));
+
+    private static string Bound(string value, int maximum) =>
+        value.Length <= maximum ? value : string.Concat(value.AsSpan(0, maximum - 1), "…");
+
     private static List<string> StripIds(string content) =>
         content.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.IndexOf("] ", StringComparison.Ordinal) is var marker && marker >= 0
@@ -118,7 +197,7 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
                 : $"- {line}")
             .ToList();
 
-    private static async Task<string?> ReadHandoffLineAsync(
+    private static async Task<(ChatMemoryComponent Component, string LlmLine)?> ReadHandoffAsync(
         LanceDbMemoryStore store,
         MemoryScope scope,
         CancellationToken cancellationToken)
@@ -138,10 +217,11 @@ public sealed class LocalChatMemoryFeature : IAsyncDisposable
                 .ThenBy(record => record.Id.Value, StringComparer.Ordinal)
                 .FirstOrDefault();
         if (handoff is null) return null;
-        var text = handoff.CanonicalText.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        var component = ToComponent(handoff);
+        var text = component.Preview;
         if (text.Length == 0) return null;
         if (text.Length > 3200) text = text[..3200];
-        return $"- {text}";
+        return (component, $"- {text}");
     }
 
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();

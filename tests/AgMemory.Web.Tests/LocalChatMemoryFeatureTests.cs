@@ -77,6 +77,55 @@ public sealed class LocalChatMemoryFeatureTests
     }
 
     [Fact]
+    public async Task RecallDetailedAsync_ReturnsStructuredComponentsForMatchedMemory()
+    {
+        var root = TemporaryPath();
+        try
+        {
+            Directory.CreateDirectory(root);
+            await using var feature = Configured(root);
+
+            await feature.RememberAsync("thread-1", "user", "Yuki lives on the local Mac.", default);
+            var recall = await feature.RecallDetailedAsync("Where does Yuki live?", default);
+
+            Assert.NotNull(recall);
+            Assert.NotEmpty(recall!.Components);
+            Assert.Contains(recall.Components, component => component.Preview.Contains("local", StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(recall.LlmContext);
+            Assert.StartsWith("- ", recall.LlmContext, StringComparison.Ordinal);
+            Assert.True(feature.LastInjectHitCount >= 1);
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Fact]
+    public async Task RecallDetailedAsync_KeywordFallbackFindsRememberedEventWhenContextIsEmpty()
+    {
+        var root = TemporaryPath();
+        try
+        {
+            Directory.CreateDirectory(root);
+            await using var feature = Configured(root);
+            await feature.RememberAsync("thread-1", "user", "keyword-alpha unique fact about deployment", default);
+
+            var recall = await feature.RecallDetailedAsync("keyword-alpha", default);
+
+            Assert.NotNull(recall);
+            Assert.NotEmpty(recall!.Components);
+            Assert.Equal("Event", recall.Components[0].Type);
+            Assert.Contains("keyword-alpha", recall.Components[0].Preview, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("keyword-alpha", recall.LlmContext!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Delete(root);
+        }
+    }
+
+    [Fact]
     public async Task UnmatchedPrompt_PrefersLatestSummaryOverEventForHandoff()
     {
         var root = TemporaryPath();

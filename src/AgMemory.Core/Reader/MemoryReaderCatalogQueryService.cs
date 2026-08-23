@@ -61,6 +61,9 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
                 foreach (var leaf in leaves.Entries)
                 {
                     var document = await DescribeLeafAsync(eligibility, leaf, cancellationToken).ConfigureAwait(false);
+                    // The reader is a curated Wiki view, not a dump of transport events. Records without metadata
+                    // need meaningful preview text before they can be shown through the safe fallback projection.
+                    if (document is null) continue;
                     if (!Matches(document, leaf.Preview, request.Filter)) continue;
                     var route = await _reader.GetOrCreateRouteAsync(leaf.MemoryId, cancellationToken).ConfigureAwait(false);
                     documents.Add(new($"/memory-reader/{Uri.EscapeDataString(route.RouteKey)}", leaf.Type, document.Title,
@@ -132,6 +135,7 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
             foreach (var leaf in leaves.Entries)
             {
                 var document = await DescribeLeafAsync(eligibility, leaf, cancellationToken).ConfigureAwait(false);
+                if (document is null) continue;
                 foreach (var @namespace in NamespaceHierarchy(document.Namespace))
                     namespaces[@namespace] = namespaces.GetValueOrDefault(@namespace) + 1;
                 foreach (var tag in document.Tags.Select(TagFacet.FromTag)) AddBoundedTag(tags, tag);
@@ -199,7 +203,7 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
         return value[4..].All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f');
     }
 
-    private async Task<WikiDocument> DescribeLeafAsync(
+    private async Task<WikiDocument?> DescribeLeafAsync(
         MemorySearchEligibility eligibility,
         MemoryReaderCatalogLeafEntry leaf,
         CancellationToken cancellationToken)
@@ -208,6 +212,9 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
         var metadata = _metadata is null
             ? null
             : await _metadata.ReadWikiMetadataAsync(scope, leaf.MemoryId, leaf.Version, cancellationToken).ConfigureAwait(false);
+        // Events are operational history. Show them only when intentionally promoted to a Wiki page via metadata.
+        // Other records can use the fallback only when the stored preview contains real visible content.
+        if (metadata is null && (leaf.Type == MemoryRecordType.Event || string.IsNullOrWhiteSpace(leaf.Preview))) return null;
         return new(
             metadata?.Title ?? FallbackTitle(leaf.Preview),
             metadata?.Namespace ?? "inbox",

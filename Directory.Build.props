@@ -2,7 +2,7 @@
   <PropertyGroup>
     <!-- Compatibility Agm.Memory.* packages keep VersionPrefix. The local Web/macOS product uses AgMemoryProductVersion. -->
     <VersionPrefix>1.0.0</VersionPrefix>
-    <AgMemoryProductVersion>1.1.0</AgMemoryProductVersion>
+    <AgMemoryProductVersion>1.2.0</AgMemoryProductVersion>
     <Authors>AI Group Manager contributors</Authors>
     <RepositoryUrl>https://github.com/PonomarevRA/ag-memmory</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

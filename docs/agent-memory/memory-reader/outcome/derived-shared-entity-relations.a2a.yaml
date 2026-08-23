@@ -1,0 +1,20 @@
+schema: agent-memory-object/v1
+id: memory-reader.outcome.derived-shared-entity-relations
+kind: outcome
+area: memory-reader
+status: completed
+title: Projected bounded weighted relations from shared entities
+summary: Wiki now projects bounded related-page links from normalized shared entities while exposing only safe navigation and numeric weights.
+recorded: "2026-08-23"
+updated: "2026-08-23"
+tags: [memory-reader, wiki, relations, graph, privacy]
+sources:
+  - kind: code
+    ref: src/AgMemory.Storage.LanceDb/Catalog/LanceDbMemoryStore.ReaderCatalog.cs
+  - kind: test
+    ref: tests/AgMemory.Storage.LanceDb.Tests/LanceDbCatalogTraversalProofTests.cs
+payload:
+  change: Added automatic related links with a positive shared-entity count, capped at 64 per source; curated wiki links take priority.
+  measurement: Storage traversal tests passed and the installed local API returned a related link with a positive weight.
+  result: Existing ready derived reader generations rebuild to the new projection state without modifying durable memory records or exposing entities.
+  supersedes: The earlier next action requiring manual curation before inbox pages could show relations.

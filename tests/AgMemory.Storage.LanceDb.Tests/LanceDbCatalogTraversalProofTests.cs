@@ -237,6 +237,76 @@ public sealed class LanceDbCatalogTraversalProofTests
         }
     }
 
+    [Fact]
+    public async Task ReaderCatalog_ProjectsSharedEntitiesAsBoundedWeightedRelatedLinks()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agmemory-reader-shared-entities-{Guid.NewGuid():N}");
+        try
+        {
+            var source = Record("shared-source", ScopeA, "source", ["Alpha", "beta"]);
+            var linked = Record("shared-linked", ScopeA, "linked title", ["alpha", "BETA"]);
+            var oneEntity = Record("shared-one", ScopeA, "one title", ["alpha"]);
+            var unrelated = Record("shared-none", ScopeA, "none title", ["gamma"]);
+            var explicitLink = Record("shared-explicit", ScopeA, "[[related:docs/shared-source|Curated source]]", ["alpha"]);
+            var eligibility = new MemorySearchEligibility(new(new[] { new ScopeSelector(ScopeA) }), null, Now.AddHours(1));
+
+            await using var store = new LanceDbMemoryStore(new(path));
+            await WriteAsync(store, Authorized(ScopeA), [source, linked, oneEntity, unrelated, explicitLink]);
+            await store.UpsertWikiMetadataAsync(new(ScopeA, source.Id, 1, "source", "docs", "shared-source", []), default);
+
+            var generation = await store.ReadReadyLeafPageAsync(eligibility, null, default);
+            Assert.NotNull(generation);
+            var sourceRelations = await store.ReadWikiRelationsAsync(eligibility, generation!.GenerationKey, source.Id,
+                MemoryWikiRelationKind.Related, default);
+            var explicitRelations = await store.ReadWikiRelationsAsync(eligibility, generation.GenerationKey, explicitLink.Id,
+                MemoryWikiRelationKind.Related, default);
+
+            Assert.Equal(new[] { linked.Id, oneEntity.Id, explicitLink.Id }.OrderBy(id => id.Value, StringComparer.Ordinal),
+                sourceRelations.Select(relation => relation.TargetMemoryId).OrderBy(id => id.Value, StringComparer.Ordinal));
+            Assert.Equal(2, Assert.Single(sourceRelations, relation => relation.TargetMemoryId == linked.Id).SharedEntityCount);
+            Assert.Equal(1, Assert.Single(sourceRelations, relation => relation.TargetMemoryId == oneEntity.Id).SharedEntityCount);
+            Assert.DoesNotContain(sourceRelations, relation => relation.TargetMemoryId == unrelated.Id);
+            Assert.Equal("Curated source", Assert.Single(explicitRelations, relation => relation.TargetMemoryId == source.Id).Label);
+            Assert.Equal(1, Assert.Single(explicitRelations, relation => relation.TargetMemoryId == source.Id).SharedEntityCount);
+        }
+        finally
+        {
+            if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ReaderCatalog_CuratedRelatedLinkDisplacesAutomaticCandidateWhenTheLimitIsFull()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"agmemory-reader-curated-relation-priority-{Guid.NewGuid():N}");
+        try
+        {
+            var source = Record("priority-source", ScopeA, "[[related:docs/manual|Curated manual]]", ["alpha"]);
+            var automaticTargets = Enumerable.Range(0, MemoryWikiLimits.MaximumRelatedPerDocument)
+                .Select(index => Record($"priority-auto-{index:D3}", ScopeA, $"automatic {index:D3}", ["alpha"])).ToArray();
+            var manual = Record("priority-manual", ScopeA, "manual", []);
+            var eligibility = new MemorySearchEligibility(new(new[] { new ScopeSelector(ScopeA) }), null, Now.AddHours(1));
+
+            await using var store = new LanceDbMemoryStore(new(path));
+            await WriteAsync(store, Authorized(ScopeA), [source, manual, .. automaticTargets]);
+            await store.UpsertWikiMetadataAsync(new(ScopeA, manual.Id, 1, "manual", "docs", "manual", []), default);
+
+            var generation = await store.ReadReadyLeafPageAsync(eligibility, null, default);
+            Assert.NotNull(generation);
+            var relations = await store.ReadWikiRelationsAsync(eligibility, generation!.GenerationKey, source.Id,
+                MemoryWikiRelationKind.Related, default);
+
+            Assert.Equal(MemoryWikiLimits.MaximumRelatedPerDocument, relations.Count);
+            Assert.Equal("Curated manual", Assert.Single(relations, relation => relation.TargetMemoryId == manual.Id).Label);
+            Assert.Equal(MemoryWikiLimits.MaximumRelatedPerDocument - 1,
+                relations.Count(relation => automaticTargets.Any(target => target.Id == relation.TargetMemoryId)));
+        }
+        finally
+        {
+            if (Directory.Exists(path)) Directory.Delete(path, recursive: true);
+        }
+    }
+
     private static async Task<CatalogTraversal> TraverseAndPersistGenerationAsync(LanceTable records, LanceTable leaves, string generation)
     {
         var memoryIds = new List<string>();
@@ -358,9 +428,9 @@ public sealed class LanceDbCatalogTraversalProofTests
 
     private static AuthorizedScopeSet Authorized(params MemoryScope[] scopes) => new(scopes.Select(scope => new ScopeSelector(scope)));
 
-    private static MemoryRecord Record(string id, MemoryScope scope, string canonicalText) => new(
+    private static MemoryRecord Record(string id, MemoryScope scope, string canonicalText, IReadOnlyList<string>? entities = null) => new(
         new MemoryId(id), scope, MemoryRecordType.Fact, MemoryLifecycleStatus.Active, canonicalText, null, .7, .8, 5,
-        Now, Now, 1, ["catalog"], new("proof", null, null, null, null, null, null, [new($"evidence-{id}")]),
+        Now, Now, 1, entities ?? ["catalog"], new("proof", null, null, null, null, null, null, [new($"evidence-{id}")]),
         null, null, $"dedup-{id}");
 
     private sealed record CatalogTraversal(IReadOnlyList<string> MemoryIds, IReadOnlyList<int> PortionLengths);
