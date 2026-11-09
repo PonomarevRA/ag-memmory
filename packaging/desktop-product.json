@@ -1,0 +1,9 @@
+{
+  "appId": "agmemory",
+  "name": "AgMemory",
+  "version": "1.6.6",
+  "binary": "AgMemoryDesktop",
+  "bundleId": "com.ponomarev.agmemory",
+  "repository": "PonomarevRA/ag-memmory",
+  "defaultDataName": "AgMemory"
+}

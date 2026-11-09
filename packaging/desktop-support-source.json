@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "ag-desktop/source-v1",
+  "source": "code-atlas desktop_support",
+  "files": [
+    {
+      "file": "scripts/desktop_support/updates.py",
+      "sha256": "5af7acca0b65c91193d9d35a8fc7aa1dc41224ff4e802150a4d736b71e5d5330"
+    },
+    {
+      "file": "scripts/desktop_support/background.py",
+      "sha256": "e36eeffda1cb9cec7fc491409d710dee9375ff778f5e051f247dcf4dc76a5267"
+    },
+    {
+      "file": "scripts/desktop_support/tray_platforms.py",
+      "sha256": "14c982e511577a300e1d8ad50edb57f361019d6938630f38927dd16707c21d1b"
+    },
+    {
+      "file": "scripts/desktop_support/__init__.py",
+      "sha256": "1c964a89a8bd2e1010b0b6936c8e91dd25610f428b5072ac0f0a4d1361020b5e"
+    },
+    {
+      "file": "scripts/desktop_support/settings.py",
+      "sha256": "9b7c7990dd8accabb38735756b43784927695d6b4d772ec73c6e2cb9e858c1bd"
+    }
+  ]
+}

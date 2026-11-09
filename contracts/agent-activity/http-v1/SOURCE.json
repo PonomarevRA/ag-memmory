@@ -1,0 +1,10 @@
+{
+  "version": "agent-activity-http/v1",
+  "source": "code-atlas/contracts/agent-activity/http-v1",
+  "digests": {
+    "README.md": "sha256:aa5bb484aaa3d4596723b8b802770250b7480c8b26742272b5de3f7a210767fe",
+    "examples.json": "sha256:1fea3969685b0074052b3fd373463d4a24295a4b866ee4629498510c010e18a3",
+    "openapi.json": "sha256:42197f7ab076432b4f2d4b1704b2901db25611d081156a3116cda871961f009c",
+    "schema.json": "sha256:cadad378252502679c4e35a8ef00961b2786deaaa79c03b531e6e0337f6ca5eb"
+  }
+}

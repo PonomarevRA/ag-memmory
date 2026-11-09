@@ -1,0 +1,6 @@
+interface:
+  display_name: "AgMemory"
+  short_description: "Рабочий контекст, знания, процедуры и опыт"
+  default_prompt: "Use $agmemory to retrieve cited context, maintain useful shared working memory, record real use and classify reusable outcomes under the actual MCP capabilities."
+policy:
+  allow_implicit_invocation: true

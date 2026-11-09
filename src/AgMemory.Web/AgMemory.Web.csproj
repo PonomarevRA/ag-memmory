@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AgMemory.Web</RootNamespace>
+    <Description>Vite SPA host for AgMemory.</Description>
+    <Version>$(AgMemoryProductVersion)</Version>
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../AgMemory.AgentSetup/AgMemory.AgentSetup.csproj" />
+    <InternalsVisibleTo Include="AgMemory.Web.Tests" />
+    <!-- Vite replaces hashed filenames during execution. Exclude evaluation-time dist items;
+         BuildWebClient adds only the newly generated files before static-asset discovery. -->
+    <Content Remove="wwwroot/dist/**" />
+    <!-- The Web host is the concrete LanceDB composition root; Contracts and Core remain provider-neutral. -->
+    <PackageReference Include="Apache.Arrow" />
+    <PackageReference Include="LanceDB" />
+    <ProjectReference Include="../AgMemory.ActivityJournal/AgMemory.ActivityJournal.csproj" />
+    <ProjectReference Include="../AgMemory.Contracts/AgMemory.Contracts.csproj" />
+    <ProjectReference Include="../AgMemory.Core/AgMemory.Core.csproj" />
+    <ProjectReference Include="../AgMemory.Storage.LanceDb/AgMemory.Storage.LanceDb.csproj" />
+  </ItemGroup>
+
+  <!-- Generate hashed assets before the SDK discovers them; evaluation-time globs still point at the previous Vite build. -->
+  <Target Name="BuildWebClient" BeforeTargets="ResolveProjectStaticWebAssets"
+          Condition="Exists('$(MSBuildProjectDirectory)/client/package.json') and '$(DesignTimeBuild)' != 'true' and '$(NoBuild)' != 'true'">
+    <Message Importance="high" Text="Building AgMemory Web Vite client..." />
+    <Exec Command="npm ci" WorkingDirectory="$(MSBuildProjectDirectory)/client" />
+    <Exec Command="npm run build" WorkingDirectory="$(MSBuildProjectDirectory)/client" />
+    <Exec Command="npm test" WorkingDirectory="$(MSBuildProjectDirectory)/client" />
+    <ItemGroup>
+      <Content Remove="wwwroot/dist/**" />
+      <Content Include="wwwroot/dist/**" CopyToPublishDirectory="PreserveNewest" />
+      <FileWrites Include="wwwroot/dist/**" />
+    </ItemGroup>
+  </Target>
+
+</Project>

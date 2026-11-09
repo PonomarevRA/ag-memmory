@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><IsPackable>false</IsPackable></PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../skills/agmemory/SKILL.md" LogicalName="AgMemory.Skill.SKILL.md" />
+    <EmbeddedResource Include="../../skills/agmemory/references/knowledge-workflows.md" LogicalName="AgMemory.Skill.references/knowledge-workflows.md" />
+    <EmbeddedResource Include="../../skills/agmemory/references/installation.md" LogicalName="AgMemory.Skill.references/installation.md" />
+    <EmbeddedResource Include="../../skills/agmemory/agents/openai.yaml" LogicalName="AgMemory.Skill.agents/openai.yaml" />
+  </ItemGroup>
+</Project>

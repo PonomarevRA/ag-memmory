@@ -1,0 +1,6 @@
+# Build-time dependencies; the packaged application does not require Python or .NET installation.
+pywebview==6.2.1
+PyInstaller==6.22.3
+psutil==7.2.2
+qtpy==2.4.3; sys_platform == "linux"
+PySide6==6.8.3; sys_platform == "linux"

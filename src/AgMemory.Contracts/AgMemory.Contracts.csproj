@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <RootNamespace>AgMemory.Contracts</RootNamespace>
+    <Description>Provider-neutral contracts for the AgMemory platform.</Description>
+    <PackageTags>$(PackageTags);contracts;provider-neutral</PackageTags>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,24 @@
+{
+  "name": "agmemory-web-client",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:dom": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "jsdom": "^26.1.0",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3",
+    "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "@ag-design/components": "file:vendor/npm/ag-design-components-0.43.1-community.2.tgz"
+  }
+}

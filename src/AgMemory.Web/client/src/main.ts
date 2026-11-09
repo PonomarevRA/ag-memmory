@@ -1,0 +1,10 @@
+import '@ag-design/components/tokens.css';
+import '@ag-design/components/styles.css';
+import './app/design-system.css';
+import './features/memory-graph/graph.css';
+import { mountAgentActivity } from './features/agent-activity/panel.js';
+import { startRouter } from './app/router.js';
+import { applyPreferences, getPreferences } from './features/navigation/browser-state.js';
+applyPreferences(getPreferences());
+startRouter(document.querySelector<HTMLElement>('#app')!);
+mountAgentActivity();

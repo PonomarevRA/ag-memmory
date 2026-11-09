@@ -1,0 +1,244 @@
+{
+  "schema": "recall-aliases/v1",
+  "concepts": [
+    {
+      "key": "procedure-transfer",
+      "query": "procedure transfer",
+      "aliases": [
+        "перенос процедур",
+        "перенос процедуры",
+        "передача навыков",
+        "передаче навыков",
+        "передачи навыков",
+        "передачу навыков",
+        "передача навыка",
+        "переносимость процедур",
+        "переносимости процедур",
+        "передача опыта",
+        "cross-model skill transfer"
+      ],
+      "acronyms": [
+        "AFTER"
+      ],
+      "source": "https://arxiv.org/html/2606.23127v1"
+    },
+    {
+      "key": "working-cas",
+      "query": "working context revision",
+      "aliases": [
+        "устаревшим агентом",
+        "перезаписи рабочего контекста",
+        "сравнение и замена",
+        "compare and swap"
+      ],
+      "acronyms": [
+        "CAS"
+      ],
+      "source": "src/AgMemory.Core/Knowledge/KnowledgeService.Metadata.cs"
+    },
+    {
+      "key": "working-expiry",
+      "query": "working context expires",
+      "aliases": [
+        "срок жизни рабочего контекста",
+        "сроке жизни рабочего контекста",
+        "срока жизни рабочего контекста",
+        "истекший рабочий контекст",
+        "истёкший рабочий контекст",
+        "context expiration"
+      ],
+      "acronyms": [
+        "TTL"
+      ],
+      "source": "src/AgMemory.Core/Knowledge/KnowledgeService.Metadata.cs"
+    },
+    {
+      "key": "request-replay",
+      "query": "request replay receipts",
+      "aliases": [
+        "повторить запрос",
+        "повтор запроса",
+        "повторные запросы",
+        "идемпотентный повтор",
+        "idempotent retry"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.Core/Knowledge/KnowledgeService.cs"
+    },
+    {
+      "key": "capacity",
+      "query": "capacity remaining headroom",
+      "aliases": [
+        "свободной ёмкости",
+        "свободной емкости",
+        "остаток доступного места",
+        "остаток ёмкости",
+        "заполненность памяти",
+        "лимит памяти",
+        "capacity warning"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.Core/Knowledge/KnowledgeService.Capacity.cs"
+    },
+    {
+      "key": "procedure-applicability",
+      "query": "procedure applicability environment",
+      "aliases": [
+        "применимость процедуры",
+        "применимости процедуры",
+        "применимость к окружению",
+        "procedure prerequisites"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.Core/Knowledge/KnowledgeService.Procedures.cs"
+    },
+    {
+      "key": "procedure-verification",
+      "query": "procedure VerifiedSuccess",
+      "aliases": [
+        "отчёт об успехе",
+        "отчет об успехе",
+        "проверенным результатом",
+        "подтверждённый успех",
+        "подтвержденный успех",
+        "подтверждённого успеха",
+        "reported success verification"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.Core/Knowledge/KnowledgeService.Procedures.cs"
+    },
+    {
+      "key": "scope",
+      "query": "memory exact scope",
+      "aliases": [
+        "область доступа",
+        "область доступа к памяти",
+        "области доступа",
+        "scope authorization"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.McpServer/LocalAgMemoryMcpRuntime.cs"
+    },
+    {
+      "key": "citation",
+      "query": "citation current revision",
+      "aliases": [
+        "ссылку на источник",
+        "ссылка на источник",
+        "ссылки на источник",
+        "resolve citation"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.McpServer/AgentProtocol.cs"
+    },
+    {
+      "key": "backup",
+      "query": "backup restore checksum",
+      "aliases": [
+        "восстановление резервной копии",
+        "восстановления резервной копии",
+        "проверка резервной копии",
+        "резервную копию",
+        "резервной копии",
+        "restore validation"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.Storage.LanceDb/Backups/LocalBackupService.Archives.cs"
+    },
+    {
+      "key": "embedding",
+      "query": "embedding lexical fallback",
+      "aliases": [
+        "смысловой вектор",
+        "смыслового вектора",
+        "семантический поиск",
+        "semantic embedding"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.McpServer/LocalAgMemoryMcpRuntime.cs"
+    },
+    {
+      "key": "task-label",
+      "query": "task labels unverified",
+      "aliases": [
+        "метка задачи",
+        "метки задачи",
+        "идентичность агента",
+        "task identity"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.McpServer/Knowledge/LocalAgMemoryMcpRuntime.Knowledge.cs"
+    },
+    {
+      "key": "whole-token",
+      "query": "lexical whole token",
+      "aliases": [
+        "целое слово",
+        "целого слова",
+        "целые слова",
+        "token boundary"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.Storage.LanceDb/Query/LanceDbMemoryStore.Query.cs"
+    },
+    {
+      "key": "context-budget",
+      "query": "context budget estimate",
+      "aliases": [
+        "бюджет контекста",
+        "бюджета контекста",
+        "большие записи",
+        "oversized record packing"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.McpServer/Knowledge/LocalAgMemoryMcpRuntime.WorkingContext.cs"
+    },
+    {
+      "key": "authority",
+      "query": "memory untrusted instructions",
+      "aliases": [
+        "разрешение на действие",
+        "полномочия из памяти",
+        "доверие к памяти",
+        "source authority"
+      ],
+      "acronyms": [],
+      "source": "src/AgMemory.McpServer/LocalAgMemoryMcpRuntime.Agent.cs"
+    },
+    {
+      "key": "atomic-memory",
+      "query": "atomic A2A object",
+      "aliases": [
+        "атомарные заметки",
+        "атомарных заметок",
+        "связанные заметки",
+        "linked memory notes"
+      ],
+      "acronyms": [],
+      "source": "AgMemory retrieval regression fixture: bounded Russian and English query aliases"
+    },
+    {
+      "key": "reciprocal-rank",
+      "query": "reciprocal rank fusion",
+      "aliases": [
+        "слияние рангов",
+        "объединение рангов"
+      ],
+      "acronyms": [
+        "RRF"
+      ],
+      "source": "src/AgMemory.Core/Retrieval/DeterministicRetrieval.cs"
+    },
+    {
+      "key": "fulltext",
+      "query": "full text search",
+      "aliases": [
+        "полнотекстовый поиск"
+      ],
+      "acronyms": [
+        "FTS"
+      ],
+      "source": "src/AgMemory.Storage.LanceDb/Query/LanceDbMemoryStore.Query.cs"
+    }
+  ]
+}

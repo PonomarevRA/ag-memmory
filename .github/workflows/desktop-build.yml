@@ -1,0 +1,52 @@
+name: Desktop installer validation
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            runtime: osx-arm64
+          - os: windows-2022
+            runtime: win-x64
+          - os: ubuntu-22.04
+            runtime: linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk libegl1 libgl1 libxkbcommon-x11-0 libxcb-cursor0 libnss3 libasound2t64
+      - run: python -m pip install -r packaging/requirements-desktop.txt
+      - run: dotnet test tests/AgMemory.Web.Tests/AgMemory.Web.Tests.csproj
+      - run: python -m unittest discover -s tests/desktop
+      - if: runner.os == 'macOS'
+        run: bash scripts/package-macos-app.sh osx-arm64
+      - if: runner.os == 'macOS'
+        run: artifacts/macos/osx-arm64/AgMemory.app/Contents/MacOS/AgMemoryDesktop --self-test
+      - if: runner.os != 'macOS'
+        run: python scripts/build-desktop.py --runtime ${{ matrix.runtime }} --output artifacts/native
+      - if: runner.os == 'Windows'
+        run: choco install innosetup --no-progress --yes
+      - if: runner.os == 'macOS'
+        run: python packaging/build_installer.py --manifest packaging/desktop-product.json --source artifacts/macos/osx-arm64/AgMemory.app --output artifacts/installers
+      - if: runner.os != 'macOS'
+        run: python packaging/build_installer.py --manifest packaging/desktop-product.json --source artifacts/native/AgMemoryDesktop --output artifacts/installers
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agmemory-${{ matrix.runtime }}-local-installers
+          path: artifacts/installers

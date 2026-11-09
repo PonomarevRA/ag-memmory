@@ -1,0 +1,79 @@
+/* Local graph workspace: discovery → overview → map and reader → equivalent record list. */
+.memory-graph-page { --graph-control-border: color-mix(in srgb, var(--text-muted) 75%, var(--surface-raised)); }
+.graph-page-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
+.graph-page-header h1 { margin-bottom: .4rem; font-size: 1.8rem; }
+.graph-page-header p:last-child { margin-bottom: 0; font-size: 1rem; }
+.graph-page-header > a { flex-shrink: 0; }
+.graph-discovery-bar { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(10rem, .35fr) auto; align-items: end; gap: 1rem; padding: 1rem 1.25rem; }
+.graph-discovery-bar label { display: grid; grid-template-rows: auto auto; align-content: end; gap: .5rem; min-width: 0; font-size: .875rem; font-weight: 600; }
+.graph-discovery-bar input, .graph-discovery-bar select { width: 100%; box-sizing: border-box; min-width: 0; min-height: 2.75rem; color: var(--text); background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-control); font: inherit; }
+.graph-discovery-bar input { padding: .625rem .75rem; }
+.graph-discovery-bar input, .graph-discovery-bar select, .memory-graph-page .ui-button--secondary { border-color: var(--graph-control-border); }
+.graph-discovery-bar select { padding: .625rem 2rem .625rem .75rem; }
+.memory-graph-page .graph-discovery-bar :is(input, select, button) { box-sizing: border-box; min-height: 2.75rem; height: max(2.75rem, calc(1.4em + 1rem + 2px)); padding: .5rem .75rem; font-size: .875rem; line-height: 1.4; }
+.memory-graph-page .graph-discovery-bar select { padding-inline-end: 2rem; }
+.memory-graph-page .ui-button { min-height: 2.75rem; }
+.memory-graph-page input:focus-visible, .memory-graph-page select:focus-visible, .memory-graph-page summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.graph-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; padding: .875rem 1.25rem 1.125rem; border-bottom: 1px solid var(--border); }
+.graph-overview > div { display: grid; align-content: start; gap: .25rem; min-width: 0; }
+.graph-overview strong { font-size: 1.5rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.graph-overview span { color: var(--text-muted); font-size: .8125rem; }
+.memory-graph-page .memory-graph-toolbar { gap: 1rem; padding: .75rem 1.25rem; align-items: center; border-bottom: 1px solid var(--border); }
+.memory-graph-page .memory-graph-view-switch [aria-pressed="true"] { color: var(--primary-contrast); background: var(--primary); border-color: var(--primary); }
+.graph-focus-toggle { display: flex; align-items: center; gap: .5rem; min-height: 2.75rem; margin-right: auto; font-size: .875rem; }
+.graph-focus-toggle input { accent-color: var(--primary); width: 1rem; height: 1rem; flex-shrink: 0; }
+.memory-graph-page .memory-graph-stage { grid-template-columns: minmax(0, 1fr) var(--memory-inspector-width, 340px); }
+.memory-graph-page .memory-graph-scene, .memory-graph-page .memory-graph-canvas { height: 34rem; min-height: 24rem; }
+.memory-graph-page .memory-graph-inspector { width: auto; min-width: 0; height: 34rem; overflow: auto; box-sizing: border-box; padding: 1.25rem; gap: 1rem; background: var(--surface-raised); }
+.memory-graph-inspector h2 { font-size: 1.125rem; line-height: 1.4; overflow-wrap: anywhere; }
+.memory-graph-inspector h3 { margin: 1.25rem 0 .5rem; font-size: .875rem; }
+.memory-graph-inspector p { font-size: .875rem; line-height: 1.55; overflow-wrap: anywhere; }
+.memory-graph-inspector .eyebrow { font-size: .6875rem; margin-bottom: .5rem; }
+.graph-selected-preview { white-space: pre-wrap; padding-left: .75rem; border-left: 2px solid var(--primary); }
+.graph-starting-points { display: grid; gap: .75rem; margin: 0; padding: 0; list-style: none; }
+.graph-starting-points li { display: grid; gap: .2rem; }
+.graph-starting-points span { font-size: .75rem; color: var(--text-muted); }
+.memory-graph-page .memory-graph-neighbor-select { min-height: 2.75rem; padding: .4rem 0; line-height: 1.4; overflow-wrap: anywhere; }
+.memory-graph-page .memory-graph-neighbors { list-style: none; padding: 0; gap: .75rem; max-height: 18rem; }
+.memory-graph-page .memory-graph-neighbors li { padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+.graph-status-bar { padding: .75rem 1.25rem; border-top: 1px solid var(--border); }
+.graph-status-bar p { margin: 0; font-size: .8125rem; line-height: 1.6; color: var(--text-muted); }
+.graph-status-bar button { margin-top: .5rem; }
+.memory-graph-page .memory-graph-explanation { padding: .75rem 1.25rem; font-size: .875rem; }
+.memory-graph-explanation summary { min-height: 2rem; align-content: center; cursor: pointer; color: var(--primary); font-weight: 600; }
+.memory-graph-explanation[open] summary { margin-bottom: .75rem; }
+.memory-graph-page .memory-graph-summary { margin-top: 1.25rem; padding: 1.25rem; box-shadow: none; }
+.graph-list-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .75rem; margin-bottom: 1rem; }
+.graph-list-heading h2 { font-size: 1.125rem; }
+.memory-graph-page .memory-graph-summary__nodes { grid-template-columns: repeat(auto-fit, minmax(min(19rem, 100%), 1fr)); max-height: 26rem; gap: .75rem; }
+.memory-graph-page .memory-graph-summary__node { height: 100%; align-content: start; align-items: baseline; padding: .875rem; gap: .5rem; background: var(--surface-raised); }
+.memory-graph-summary__node strong { flex: 1; min-width: 0; font-size: .875rem; line-height: 1.5; overflow-wrap: anywhere; text-wrap: pretty; }
+.memory-graph-summary__node .graph-record-preview { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; flex-basis: 100%; font-size: .8125rem; line-height: 1.5; color: var(--text-muted); overflow-wrap: anywhere; }
+.memory-graph-page .memory-graph-summary__node[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 10%, var(--surface-raised)); border-color: var(--primary); }
+.memory-graph-page .memory-graph-summary__node:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.memory-graph-page .memory-graph-card { box-shadow: none; }
+.memory-graph-page [hidden] { display: none !important; }
+@media (max-width: 72rem) {
+  .memory-graph-page .memory-graph-stage { grid-template-columns: minmax(0, 1fr) minmax(16rem, 30%); }
+  .memory-graph-page .memory-graph-inspector { padding: 1rem; }
+}
+@media (max-width: 52rem) {
+  .graph-page-header { align-items: start; flex-wrap: wrap; }
+  .graph-discovery-bar { grid-template-columns: minmax(0, 1fr) auto; }
+  .graph-discovery-bar label:first-child { grid-column: 1 / -1; }
+  .graph-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .memory-graph-page .memory-graph-stage { grid-template-columns: minmax(0, 1fr); }
+  .memory-graph-page .memory-graph-scene, .memory-graph-page .memory-graph-canvas { height: 27rem; min-height: 20rem; }
+  .memory-graph-page .memory-graph-inspector { height: auto; overflow: visible; border-left: 0; border-top: 1px solid var(--border); }
+  .memory-graph-page .memory-graph-zoom { margin-left: 0; }
+  .graph-focus-toggle { flex-basis: 100%; }
+}
+@media (max-width: 36rem) {
+  .graph-discovery-bar { grid-template-columns: minmax(0, 1fr); }
+  .graph-discovery-bar label:first-child { grid-column: auto; }
+  .memory-graph-page .memory-graph-toolbar { align-items: stretch; }
+  .memory-graph-page .memory-graph-zoom { width: 100%; }
+}
+@media (forced-colors: active) {
+  .memory-graph-summary__node[aria-pressed="true"] { outline: 2px solid Highlight; }
+}

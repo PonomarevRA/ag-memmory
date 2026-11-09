@@ -1,0 +1,9 @@
+{
+  "version": "agent-activity/v1",
+  "source": "code-atlas/contracts/agent-activity/v1",
+  "digests": {
+    "examples.json": "sha256:f2e752c2cfdf40b3f9f8168df196694077a15c707ce3b762ae827a013f26fe3b",
+    "README.md": "sha256:5815ba89df41e5592803fa3117e383c2961671ef09cd7d9c529526c50002946f",
+    "event.schema.json": "sha256:c76c317593a6cc337118256aa16f3e0ce6a98bf6e74bdb2795eed5ac9a151358"
+  }
+}
