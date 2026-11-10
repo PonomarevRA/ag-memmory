@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { safeResponse, unavailable } from './api.js';
-import { renderKnowledge } from './page.js';
+import { mountKnowledgePage, renderKnowledge } from './page.js';
 import { matchRoute } from '../../app/routes.js';
 
 describe('knowledge catalogue', () => {
@@ -47,11 +47,13 @@ describe('knowledge catalogue', () => {
     ] });
     document.body.innerHTML = renderKnowledge(state, 'L11');
     expect(document.body.textContent).toContain('knowledge preview');
-    expect(document.body.textContent).not.toContain('procedure preview');
-    expect(document.body.textContent).toContain('полезность неизвестна');
+    const dispose = mountKnowledgePage(document.body);
+    expect(document.querySelector('[data-knowledge-item="L12"]')?.hasAttribute('hidden')).toBe(true);
+    dispose?.();
+    expect(document.body.textContent).toContain('Полезность неизвестна');
     document.body.innerHTML = renderKnowledge(state, 'L12');
-    expect(document.body.textContent).toContain('полезность 0%');
-    expect(document.body.textContent).toContain('оценок 3');
+    expect(document.body.textContent).toContain('Полезность 0%');
+    expect(document.body.textContent).toContain('Оценок 3');
   });
 });
 
@@ -61,7 +63,9 @@ it('explains empty classifications separately from saved memory and names human-
   expect(document.querySelector('.memory-layers summary')?.textContent).toContain('уровни памяти');
   expect(document.querySelector('a[href="/memory-reader"]')).not.toBeNull();
   expect(document.body.textContent).toContain('Ноль здесь не означает');
-  expect(document.querySelector('a[href="/knowledge?class=L12"]')?.textContent).toBe('Процедуры · L12');
+  const dispose = mountKnowledgePage(document.body);
+  expect(document.body.textContent).toContain('Процедуры · L12');
+  dispose?.();
   expect(document.body.textContent).toContain('L1 · Личный контекст агента');
 });
 

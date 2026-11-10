@@ -244,13 +244,11 @@ public sealed class MemoryGraphEndpointTests
             await using var feature = new LocalMemoryGraphFeature(new MemoryGraphHostOptions(), root);
             var context = Context(IPAddress.Loopback);
 
-            await using var chat = new LocalChatMemoryFeature(new MemoryGraphHostOptions(), root);
             await using var reader = new LocalMemoryReaderFeature(new MemoryReaderHostOptions(), root, Provider(root));
             var result = await MemoryStatusEndpoint.HandleAsync(
                 context,
                 new TestHostEnvironment(isDevelopment: true, root),
                 feature,
-                chat,
                 reader,
                 default);
             var response = await ExecuteStatusAsync(result, context);
@@ -270,16 +268,13 @@ public sealed class MemoryGraphEndpointTests
     }
 
     [Fact]
-    public async Task StatusEndpoint_ReportsInjectCountAndReaderAlignmentWithoutLeakingStoreIdentity()
+    public async Task StatusEndpoint_ReportsReaderAlignmentAndRetiredMetricWithoutLeakingStoreIdentity()
     {
         var root = TemporaryPath();
         try
         {
             Directory.CreateDirectory(root);
             var options = ConfiguredOptions();
-            await using var chat = new LocalChatMemoryFeature(options, root);
-            await chat.RememberAsync("status-thread", "user", "alpha-beta-gamma unique marker", default);
-            await chat.RecallAsync("qqqqzzzzmmmm unmatched query tokens", default);
             await using var feature = new LocalMemoryGraphFeature(options, root);
             await using var alignedReader = new LocalMemoryReaderFeature(AlignedReaderOptions(options), root, Provider(root));
             await using var driftedReader = new LocalMemoryReaderFeature(new MemoryReaderHostOptions
@@ -292,13 +287,13 @@ public sealed class MemoryGraphEndpointTests
             var context = Context(IPAddress.Loopback);
 
             var aligned = await ExecuteStatusAsync(await MemoryStatusEndpoint.HandleAsync(
-                context, new TestHostEnvironment(isDevelopment: true, root), feature, chat, alignedReader, default), context);
+                context, new TestHostEnvironment(isDevelopment: true, root), feature, alignedReader, default), context);
             context.Response.Body = new MemoryStream();
             var drifted = await ExecuteStatusAsync(await MemoryStatusEndpoint.HandleAsync(
-                context, new TestHostEnvironment(isDevelopment: true, root), feature, chat, driftedReader, default), context);
+                context, new TestHostEnvironment(isDevelopment: true, root), feature, driftedReader, default), context);
 
             Assert.Equal("available", aligned.Status);
-            Assert.Equal(1, aligned.LastInjectHitCount);
+            Assert.Equal(0, aligned.LastInjectHitCount);
             Assert.True(aligned.ReaderAligned);
             Assert.False(drifted.ReaderAligned);
             Assert.DoesNotContain("Actor", typeof(MemoryStatusApiResponse).GetProperties().Select(property => property.Name));

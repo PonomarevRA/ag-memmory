@@ -9,15 +9,22 @@ namespace AgMemory.Storage.LanceDb;
 public sealed class KnowledgeAnnotationStore : IKnowledgeAnnotationStore
 {
     private readonly string _root;
+    private readonly string _leaseDirectory;
     private readonly string _directory;
     private readonly StorageLeaseGate _gate;
     private const int MaximumBytes = 4 * 1024 * 1024;
 
-    public KnowledgeAnnotationStore(string storagePath)
+    public KnowledgeAnnotationStore(string storagePath) : this(storagePath, false) { }
+
+    /// <summary>Gives short-lived notes a separate quota and document namespace under the same backup lease.</summary>
+    public static KnowledgeAnnotationStore ForTemporaryNotes(string storagePath) => new(storagePath, true);
+
+    private KnowledgeAnnotationStore(string storagePath, bool temporaryNotes)
     {
         _root = Path.GetFullPath(storagePath);
-        _directory = Path.Combine(_root, ".agmemory-annotations");
-        _gate = new(_directory, ".annotations.lock");
+        _leaseDirectory = Path.Combine(_root, ".agmemory-annotations");
+        _directory = temporaryNotes ? Path.Combine(_leaseDirectory, "temporary-notes") : _leaseDirectory;
+        _gate = new(_leaseDirectory, ".annotations.lock");
     }
 
     public async Task<KnowledgeAnnotationState> ReadAsync(string profile, CancellationToken token)
@@ -41,9 +48,10 @@ public sealed class KnowledgeAnnotationStore : IKnowledgeAnnotationStore
         {
             CheckPaths(path);
             CleanupTemps(path);
-            if ((await ReadDocumentAsync(path, token).ConfigureAwait(false)).Version != expectedVersion) return false;
-            if (!File.Exists(path) && Directory.EnumerateFiles(_directory, "*.json").Take(128).Count() >= 128)
-                throw new InvalidOperationException("knowledge_capacity_exceeded");
+            var current = await ReadDocumentAsync(path, token).ConfigureAwait(false);
+            if (current.Version != expectedVersion || current.Version != 0 &&
+                current.TemporaryNoteGeneration != next.TemporaryNoteGeneration) return false;
+            if (!File.Exists(path)) await EnsureProfileCapacityAsync(token).ConfigureAwait(false);
             temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
             if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
@@ -64,20 +72,48 @@ public sealed class KnowledgeAnnotationStore : IKnowledgeAnnotationStore
         }
     }
 
+    /// <summary>Reclaims only fully expired note scopes; generation IDs fence stale writers after re-creation.</summary>
+    private async Task EnsureProfileCapacityAsync(CancellationToken token)
+    {
+        const int maximumProfiles = 128;
+        if (Directory.EnumerateFiles(_directory, "*.json").Take(maximumProfiles).Count() < maximumProfiles) return;
+        if (_directory != _leaseDirectory)
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddHours(-48);
+            foreach (var candidate in Directory.EnumerateFiles(_directory, "*.json"))
+            {
+                token.ThrowIfCancellationRequested();
+                CheckPaths(candidate);
+                var existing = await ReadDocumentAsync(candidate, token).ConfigureAwait(false);
+                if (existing.TemporaryNotes?.Values.All(note => note.ExpiresAtUtc <= cutoff) != true) continue;
+                File.Delete(candidate);
+                if (Directory.EnumerateFiles(_directory, "*.json").Take(maximumProfiles).Count() < maximumProfiles) return;
+            }
+        }
+        throw new InvalidOperationException("knowledge_capacity_exceeded");
+    }
+
     /// <summary>Validates authority identifiers and paths before any lease can create or follow a file.</summary>
     private string Prepare(string profile)
     {
         if (string.IsNullOrWhiteSpace(profile) || profile.Length > 1024 || profile.Any(char.IsControl)) throw new ArgumentException("Invalid annotation profile.");
         var path = Path.Combine(_directory, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(profile))) + ".json");
         CheckPaths(path);
-        if (OperatingSystem.IsWindows()) Directory.CreateDirectory(_directory);
-        else Directory.CreateDirectory(_directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        CreatePrivateDirectory(_leaseDirectory);
+        if (_directory != _leaseDirectory) CreatePrivateDirectory(_directory);
         return path;
+    }
+
+    /// <summary>Creates controlled document directories with owner-only Unix permissions.</summary>
+    private static void CreatePrivateDirectory(string path)
+    {
+        if (OperatingSystem.IsWindows()) Directory.CreateDirectory(path);
+        else Directory.CreateDirectory(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
     }
 
     private void CheckPaths(string document)
     {
-        foreach (var path in new[] { _root, _directory, Path.Combine(_directory, ".annotations.lock"), document })
+        foreach (var path in new[] { _root, _leaseDirectory, _directory, Path.Combine(_leaseDirectory, ".annotations.lock"), document })
             if (new FileInfo(path).LinkTarget is not null || new DirectoryInfo(path).LinkTarget is not null)
                 throw new IOException("Annotation paths cannot be symbolic links.");
     }
@@ -99,6 +135,20 @@ public sealed class KnowledgeAnnotationStore : IKnowledgeAnnotationStore
             state.Claims.Count > 1024 || state.ProcedureFacets.Count > 1024 ||
             state.Claims.Values.Any(value => value is null) || state.ProcedureFacets.Values.Any(value => value is null))
             throw new InvalidDataException("Invalid or unbounded annotation state.");
+        if (state.TemporaryNotes is { } notes &&
+            (state.TemporaryNoteGeneration is null || state.TemporaryNoteGeneration == Guid.Empty ||
+             notes.Count > 256 || notes.Values.Any(InvalidTemporaryNote)))
+            throw new InvalidDataException("Invalid or unbounded temporary notes.");
+    }
+
+    /// <summary>Checks that active notes carry their author and expired tombstones carry no note or recipient data.</summary>
+    private static bool InvalidTemporaryNote(TemporaryNote? note)
+    {
+        if (note?.Deliveries is null || note.Deliveries.Length > 32 ||
+            note.Deliveries.Any(delivery => delivery is null || delivery.Recipient is null || delivery.Count < 1)) return true;
+        if (note.Content is null)
+            return note.Title is not null || note.Author is not null || note.Deliveries.Length != 0;
+        return note.Title is null || note.Author is null;
     }
 
     /// <summary>Reclaims only this profile's abandoned pre-commit files while every cooperating writer is excluded.</summary>

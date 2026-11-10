@@ -1,5 +1,4 @@
 using System.Text.Json;
-using AgMemory.Web.Features.Chat;
 using AgMemory.Web.Features.MemoryGraph;
 using AgMemory.Web.Features.MemoryReader;
 
@@ -14,7 +13,6 @@ public static class MemoryStatusEndpoint
         HttpContext context,
         IHostEnvironment environment,
         LocalMemoryGraphFeature feature,
-        LocalChatMemoryFeature chat,
         LocalMemoryReaderFeature reader,
         CancellationToken cancellationToken)
     {
@@ -36,7 +34,7 @@ public static class MemoryStatusEndpoint
                 snapshot.InactiveMemoryCount,
                 snapshot.LatestUpdateAt,
                 snapshot.ActiveByType.Select(item => new MemoryStatusTypeCountDto(item.Type.ToString(), item.Count)).ToArray(),
-                chat.LastInjectHitCount,
+                0, // Retired chat metric remains on the wire for existing status consumers.
                 reader.AlignsWith(feature)));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -55,7 +53,7 @@ public static class MemoryStatusEndpoint
     private static IResult Json(MemoryStatusApiResponse response) => new MemoryStatusJsonResult(response);
 }
 
-/// <summary>Browser-safe status response: aggregate counts, last inject hit count and reader alignment only.</summary>
+/// <summary>Browser-safe status response: aggregate counts and reader alignment; the retired inject count is always zero.</summary>
 public sealed record MemoryStatusApiResponse(
     string Status,
     int TotalMemoryCount,

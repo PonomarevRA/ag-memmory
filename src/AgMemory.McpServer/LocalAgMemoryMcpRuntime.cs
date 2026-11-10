@@ -122,6 +122,7 @@ public sealed partial class LocalAgMemoryMcpRuntime : IAsyncDisposable
     private readonly LanceDbMemoryStore _store;
     private readonly MemoryCommandService _commands;
     private readonly LocalMcpUsageAuditObserver _usageAudit;
+    private readonly Lazy<LocalAgMemoryMcpRuntime> _sharedProcedureLibrary;
     private readonly SegmentJournal? _activityStore;
     private readonly ActivityWriter? _activityWriter;
     private readonly ActivityObserver? _activity;
@@ -129,6 +130,7 @@ public sealed partial class LocalAgMemoryMcpRuntime : IAsyncDisposable
     public LocalAgMemoryMcpRuntime(LocalAgMemoryMcpConfiguration configuration, IUsageAuditStore? auditStore = null)
     {
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _sharedProcedureLibrary = new(() => new LocalAgMemoryMcpRuntime(SharedProcedureConfiguration(configuration)));
         // Activity is independent of the legacy opt-in audit. Failure to initialize never disables memory work.
         try
         {
@@ -264,6 +266,7 @@ public sealed partial class LocalAgMemoryMcpRuntime : IAsyncDisposable
     /// <summary>Closes primary memory storage independently of optional audit work still completing in its separate connection.</summary>
     public async ValueTask DisposeAsync()
     {
+        if (_sharedProcedureLibrary.IsValueCreated) await _sharedProcedureLibrary.Value.DisposeAsync().ConfigureAwait(false);
         await _store.DisposeAsync().ConfigureAwait(false);
         await _usageAudit.DisposeAsync().ConfigureAwait(false);
         if (_activityWriter is not null) await _activityWriter.DisposeAsync().ConfigureAwait(false);

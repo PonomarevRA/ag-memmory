@@ -175,6 +175,82 @@ public sealed class ContextEffectivenessTests : IDisposable
         Assert.Equal(4, working.OmittedCandidateCount);
     }
 
+    /// <summary>Compact context covers independent facets, keeps the task fence and can widen without changing legacy defaults.</summary>
+    [Fact]
+    public async Task CompactContextCoversIndependentFacetsWithoutChangingLegacyContext()
+    {
+        await using var runtime = Runtime();
+        const string zircon = "zircon custodian for the fixture";
+        const string cobalt = "cobalt inventory for the fixture";
+        const string quartz = "quartz worksheet for the fixture";
+        await RememberAsync(runtime, zircon);
+        await RememberAsync(runtime, cobalt);
+        await RememberAsync(runtime, quartz);
+        for (var index = 0; index < 4; index++) await RememberAsync(runtime, "worksheet distractor " + index);
+        Assert.Null((await runtime.TaskWorkingAsync("fixture-task", "Fixture goal", [], [], [], "Continue", 0, "fixture_l2")).Error);
+
+        var response = await runtime.TaskContextCompactAsync("fixture-task", "worksheet", 8192,
+            queryFacets: ["zircon", "cobalt", " zircon "]);
+        Assert.Null(response.Error);
+        var compact = response.Data!;
+        Assert.Equal(new[] { zircon, cobalt }, compact.Items.Take(2).Select(item => item.Memory.Content));
+        Assert.Equal(3, compact.Items.Count);
+        Assert.Equal(1, compact.WorkingSetRevision);
+        Assert.Equal("Fixture goal", compact.WorkingSet!.Goal);
+        Assert.All(compact.Items, item => Assert.NotEmpty(item.Memory.CitationRef));
+
+        var legacy = (await runtime.TaskContextAsync("fixture-task", "worksheet", 8192, "search")).Data!;
+        var widened = (await runtime.TaskContextCompactAsync("fixture-task", "worksheet", 8192, "search", maxCards: 6)).Data!;
+        Assert.Equal(5, legacy.Items.Count);
+        Assert.Equal(legacy.Items.Select(item => item.Memory.Content), widened.Items.Select(item => item.Memory.Content));
+        Assert.Null(widened.WorkingSet);
+    }
+
+    /// <summary>Two actors share the same configured team task while citations remain actor-bound.</summary>
+    [Fact]
+    public async Task CompactContextSharesTaskNotesOnlyWithinConfiguredTeam()
+    {
+        var config = LocalAgMemoryMcpConfiguration.Create(_path, "author", "tenant", "project", knowledgeTeamId: "team");
+        await using var author = new LocalAgMemoryMcpRuntime(config);
+        await using var reader = new LocalAgMemoryMcpRuntime(config with { Actor = new("reader") });
+        await using var outsider = new LocalAgMemoryMcpRuntime(config with { Actor = new("outsider"), KnowledgeTeamId = "other" });
+        await using var otherProject = new LocalAgMemoryMcpRuntime(config with { Scope = config.Scope with { ProjectId = new("other-project") } });
+        const string note = "zircon shared project note";
+        await RememberAsync(author, note);
+        Assert.Null((await author.TaskWorkingAsync("shared-task", "Shared working note", [], [], [], "Continue", 0, "shared_note")).Error);
+
+        var authored = (await author.TaskContextCompactAsync("shared-task", "zircon")).Data!;
+        var shared = (await reader.TaskContextCompactAsync("shared-task", "zircon")).Data!;
+        var separate = (await outsider.TaskContextCompactAsync("shared-task", "zircon")).Data!;
+        var foreign = (await otherProject.TaskContextCompactAsync("shared-task", "zircon")).Data!;
+        Assert.Equal("Shared working note", shared.WorkingSet!.Goal);
+        Assert.Equal(1, shared.WorkingSetRevision);
+        Assert.Null(separate.WorkingSet);
+        Assert.Null(foreign.WorkingSet);
+        Assert.Empty(foreign.Items);
+        var own = Assert.Single(authored.Items).Memory;
+        var received = Assert.Single(shared.Items).Memory;
+        Assert.Equal(note, received.Content);
+        Assert.Equal(note, Assert.Single(separate.Items).Memory.Content);
+        Assert.NotEqual(own.CitationRef, received.CitationRef);
+        Assert.NotNull((await reader.AgentResolveAsync(own.CitationRef, default)).Error);
+        Assert.Null((await reader.AgentResolveAsync(received.CitationRef, default)).Error);
+    }
+
+    /// <summary>Case-sensitive aliases must survive facet deduplication against a literal primary query.</summary>
+    [Fact]
+    public async Task CompactContextPreservesAcronymFacetCase()
+    {
+        await using var runtime = Runtime();
+        const string note = "procedure transfer between models";
+        await RememberAsync(runtime, note);
+        var literal = (await runtime.TaskContextCompactAsync("fixture-task", "after", 8192, "search")).Data!;
+        var expanded = (await runtime.TaskContextCompactAsync("fixture-task", "after", 8192, "search",
+            queryFacets: ["AFTER"])).Data!;
+        Assert.Empty(literal.Items);
+        Assert.Equal(note, Assert.Single(expanded.Items).Memory.Content);
+    }
+
     /// <summary>Retracting a resident must backfill the canonical top ten while keeping stale content and stale warmth out.</summary>
     [Fact]
     public async Task CanonicalBackfillKeepsTenAnswersAfterWarmRetraction()

@@ -74,7 +74,7 @@ public sealed class ChatMemorySourceLinks
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch { /* Store failures must not expose native diagnostics through a saved citation. */ }
-        return Results.Content("Источник изменён или недоступен. Вернитесь к ответу и обновите контекст памяти.",
+        return Results.Content("Источник изменён или недоступен. Откройте обозреватель памяти и найдите запись по её названию.",
             "text/plain; charset=utf-8", statusCode: StatusCodes.Status410Gone);
     }
 

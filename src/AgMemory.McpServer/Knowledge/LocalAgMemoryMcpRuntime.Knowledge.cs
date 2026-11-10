@@ -41,8 +41,10 @@ public sealed partial class LocalAgMemoryMcpRuntime
         return new KnowledgeCapabilitiesView("agmemory-knowledge-v1", _agentReferences.Value.ProfileRef,
             ["memory_metadata", "memory_procedures", "memory_procedure", "memory_occurrence", "memory_application",
              "memory_present", "memory_feedback", "memory_occurrence_update", "working_update", "working_context",
-             "task_working_update", "task_context", "memory_claim", "memory_claims", "memory_evidence",
-             "memory_procedure_facets", "memory_procedure_discovery", "memory_review", "memory_warm_exclude"],
+             "task_working_update", "task_context", "task_context_compact", "memory_claim", "memory_claims", "memory_evidence",
+             "memory_procedure_facets", "memory_procedure_discovery", "memory_shared_procedure_discovery", "memory_shared_procedure_publish",
+             "memory_review", "memory_warm_exclude",
+             "memory_temporary_note_create", "memory_temporary_notes", "memory_temporary_note_read"],
             "shared_configured_authority", "caller_labels_unverified", false, false, false, 8192, "explicit_reversible_warm_exclusion")
         { KnowledgeProfileRef = KnowledgeProfileRef, KnowledgeSharing = _configuration.KnowledgeTeamId is null ? "actor" : "local_team", Capacity = capacity,
           KnowledgeStorage = _configuration.UseKnowledgeJournal ? "journal_v2_explicit_migration" : "legacy_v1",
@@ -80,7 +82,14 @@ public sealed partial class LocalAgMemoryMcpRuntime
     /// <summary>Creates or replaces one procedure under CAS; the request key is stable and the returned locator is opaque.</summary>
     public Task<AgentResponse<KnowledgeProcedureView>> KnowledgeProcedureAsync(string? procedureRef, long expectedRevision,
         string goal, string[] aliases, string applicability, string preconditions, string steps, string verification,
-        string? runbookRef, string requestKey, CancellationToken cancellationToken = default) => SafeKnowledgeAsync(async () =>
+        string? runbookRef, string requestKey, CancellationToken cancellationToken = default) => SafeKnowledgeAsync(() =>
+            SaveProcedureAsync(procedureRef, expectedRevision, goal, aliases, applicability, preconditions, steps,
+                verification, runbookRef, requestKey, cancellationToken));
+
+    /// <summary>Applies the same validation, CAS and replay rules to private and shared procedure writes.</summary>
+    private async Task<KnowledgeProcedureView> SaveProcedureAsync(string? procedureRef, long expectedRevision,
+        string goal, string[] aliases, string applicability, string preconditions, string steps, string verification,
+        string? runbookRef, string requestKey, CancellationToken cancellationToken)
     {
         ValidateRequestKey(requestKey);
         ValidateAgentText(goal, 1000); ValidateAgentLines(aliases); ValidateAgentText(applicability, 1000);
@@ -102,7 +111,7 @@ public sealed partial class LocalAgMemoryMcpRuntime
         foreach (var saved in state.ProcedureHistory.Values)
             if (saved.Key == result.Key && saved.Revision == result.Revision) return ToKnowledgeProcedure(saved);
         throw new AgentRequestException("reference_unavailable");
-    });
+    }
 
     /// <summary>Records an actual occurrence separately from its symptom family; identical write retries do not count again.</summary>
     public Task<AgentResponse<KnowledgeMutationResult>> KnowledgeOccurrenceAsync(string occurrenceKey, string familyKey,
@@ -223,7 +232,8 @@ public sealed partial class LocalAgMemoryMcpRuntime
     });
 
     /// <summary>Maps feature validation/conflicts without exposing provider errors, IDs, paths or caller payloads.</summary>
-    private Task<AgentResponse<T>> SafeKnowledgeAsync<T>(Func<Task<T>> operation, [CallerMemberName] string operationName = "unknown") => SafeAgentAsync(async () =>
+    private Task<AgentResponse<T>> SafeKnowledgeAsync<T>(Func<Task<T>> operation,
+        UsageAuditOperation auditOperation = UsageAuditOperation.Recall, [CallerMemberName] string operationName = "unknown") => SafeAgentAsync(async () =>
     {
         try { return await operation().ConfigureAwait(false); }
         catch (InvalidOperationException error)
@@ -242,7 +252,7 @@ public sealed partial class LocalAgMemoryMcpRuntime
             if (code is not null) throw new AgentRequestException(code);
             throw;
         }
-    }, operationName: operationName);
+    }, auditOperation, operationName);
 
     /// <summary>Validates the exact encrypted reference purpose before using its internal locator.</summary>
     private AgentReferenceProtector.Reference ReadKnowledgeReference(string value, string purpose)

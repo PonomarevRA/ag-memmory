@@ -102,6 +102,7 @@ public sealed class ActivityObserver(ActivityWriter writer, string partition, st
         "AgentCapabilitiesAsync" => "memory_capabilities", "AgentContextAsync" => "memory_context", "AgentResolveAsync" => "memory_resolve",
         "AgentCorrectAsync" => "memory_correct", "AgentHandoffAsync" => "memory_handoff", "AgentDecisionAsync" => "memory_decision",
         "KnowledgeCapabilitiesAsync" => "knowledge_capabilities", "KnowledgeMetadataAsync" => "memory_metadata", "KnowledgeProceduresAsync" => "memory_procedures",
+        "SharedProcedurePublishAsync" => "memory_shared_procedure_publish",
         "KnowledgeProcedureAsync" => "memory_procedure", "KnowledgeOccurrenceAsync" => "memory_occurrence", "KnowledgeApplicationAsync" => "memory_application",
         "KnowledgePresentAsync" => "memory_present", "KnowledgeFeedbackAsync" => "memory_feedback", "KnowledgeOccurrenceUpdateAsync" => "memory_occurrence_update",
         "KnowledgeWorkingAsync" => "working_update", "WorkingContextAsync" => "working_context", "KnowledgeReviewAsync" => "memory_review", "KnowledgeWarmExcludeAsync" => "memory_warm_exclude",

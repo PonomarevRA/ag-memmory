@@ -4,7 +4,6 @@ vi.mock('./shell.js', () => ({ shell: (content: string) => `<main tabindex="-1">
 vi.mock('../pages/index.js', () => ({ renderPage: vi.fn(async (route: { name: string }) => route.name) }));
 vi.mock('../features/memory-graph/page.js', () => ({ mountMemoryGraphPage: vi.fn(), disposeMemoryGraph: vi.fn() }));
 vi.mock('../features/memory-graph/page-controller.js', () => ({ dispose: vi.fn() }));
-vi.mock('../features/chat/chat-stream.js', () => ({ dispose: vi.fn() }));
 vi.mock('../features/memory-reader/page-controller.js', () => ({ dispose: vi.fn(), mountMemoryReaderPage: vi.fn() }));
 vi.mock('../features/navigation/index.js', () => ({ trackVisit: vi.fn(), beginNavigation: vi.fn() }));
 vi.mock('../features/app-version/api.js', () => ({ loadAppVersion: vi.fn() }));

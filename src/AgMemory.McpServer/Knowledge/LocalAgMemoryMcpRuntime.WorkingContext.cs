@@ -14,21 +14,29 @@ public sealed partial class LocalAgMemoryMcpRuntime
     /// </summary>
     public Task<AgentResponse<KnowledgeContextView>> WorkingContextAsync(string query, int budget = 2048,
         string mode = "working", CancellationToken cancellationToken = default) =>
-        WorkingContextCoreAsync(null, query, budget, mode, cancellationToken);
+        WorkingContextCoreAsync(null, query, budget, mode, 10, null, cancellationToken);
 
     /// <summary>Reads only the named task's L2 while canonical search and warm residency retain the configured authority.</summary>
     public Task<AgentResponse<KnowledgeContextView>> TaskContextAsync(string taskKey, string query = "", int budget = 2048,
         string mode = "working", CancellationToken cancellationToken = default) =>
-        WorkingContextCoreAsync(taskKey ?? string.Empty, query, budget, mode, cancellationToken);
+        WorkingContextCoreAsync(taskKey ?? string.Empty, query, budget, mode, 10, null, cancellationToken);
+
+    /// <summary>Reads a bounded task context and prioritizes distinct evidence from client-supplied facets.</summary>
+    public Task<AgentResponse<KnowledgeContextView>> TaskContextCompactAsync(string taskKey, string query = "",
+        int budget = 2048, string mode = "working", int maxCards = 3, string[]? queryFacets = null,
+        CancellationToken cancellationToken = default) =>
+        WorkingContextCoreAsync(taskKey ?? string.Empty, query, budget, mode, maxCards, queryFacets, cancellationToken);
 
     /// <summary>Shares source validation and packing; explicit task requests never fall back to unrelated legacy L2.</summary>
     private Task<AgentResponse<KnowledgeContextView>> WorkingContextCoreAsync(string? taskKey, string query, int budget,
-        string mode, CancellationToken cancellationToken) => SafeKnowledgeAsync(async () =>
+        string mode, int maxCards, string[]? queryFacets, CancellationToken cancellationToken) => SafeKnowledgeAsync(async () =>
     {
         if (query is null || query.Length > 1000 || budget is < 256 or > 8192 || mode is not ("working" or "search"))
             throw new ArgumentException("Invalid working context request.");
         if (mode == "search" && string.IsNullOrWhiteSpace(query)) throw new ArgumentException("Search requires a query.");
         if (!string.IsNullOrWhiteSpace(query)) ValidateAgentText(query, 1000);
+        if (maxCards is < 1 or > 10) throw new ArgumentException("Invalid context card limit.");
+        var facets = ValidateTaskQueryFacets(query, queryFacets);
         if (taskKey is not null) KnowledgeProfileIdentity.ValidateTaskKey(taskKey);
         _activity?.Query(query);
         var state = await Knowledge.GetAsync(cancellationToken).ConfigureAwait(false);
@@ -55,9 +63,9 @@ public sealed partial class LocalAgMemoryMcpRuntime
         }
         if (!string.IsNullOrWhiteSpace(query))
         {
-            var candidates = await SearchAgentCandidatesAsync(eligibility, query, 64,
-                cancellationToken).ConfigureAwait(false);
-            ranked = candidates.Items;
+            ranked = facets.Count == 0
+                ? (await SearchAgentCandidatesAsync(eligibility, query, 64, cancellationToken).ConfigureAwait(false)).Items
+                : await SearchTaskContextFacetsAsync(eligibility, query, facets, cancellationToken).ConfigureAwait(false);
         }
         var selected = new List<KnowledgeContextItem>();
         var context = new KnowledgeContextView(selected, working, 0, ranked?.Count ?? residents.Count, mode, "knowledge-working-v2")
@@ -79,7 +87,7 @@ public sealed partial class LocalAgMemoryMcpRuntime
                 selected.RemoveAt(selected.Count - 1);
             else
                 context = proposed;
-            if (selected.Count == 10) break;
+            if (selected.Count == maxCards) break;
         }
         return EstimateKnowledgeContext(context);
     });

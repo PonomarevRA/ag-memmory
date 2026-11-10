@@ -82,9 +82,17 @@ public sealed class MemoryReaderCatalogQueryServiceTests
         Assert.Equal(MemoryReaderCatalogState.Available, page.State);
         Assert.Equal(MemoryReaderLimits.DocumentsPerPage, page.Documents.Count);
         Assert.Equal(MemoryReaderLimits.DocumentsPerPage, source.MetadataReads);
-        Assert.Equal(2, source.LeafReads);
+        Assert.Equal(1, source.LeafReads);
         Assert.Equal(2, compiled.FacetReads);
         Assert.Equal(1_000, Assert.Single(page.Namespaces).Count);
+
+        Assert.NotNull(page.NextCursor);
+        var next = await service.BrowseAsync(new(Actor, Scope, page.NextCursor, MemoryReaderCatalogFilter.Empty, Version), default);
+        Assert.Equal(MemoryReaderCatalogState.Available, next.State);
+        Assert.Equal(MemoryReaderLimits.DocumentsPerPage, next.Documents.Count);
+        Assert.NotEqual(page.Documents[0].RecordHref, next.Documents[0].RecordHref);
+        Assert.Equal(2, source.LeafReads);
+        Assert.Equal(4, compiled.FacetReads);
     }
 
     /// <summary>Metadata may invalidate a generation after the compiled facets were read but before cards are emitted.</summary>

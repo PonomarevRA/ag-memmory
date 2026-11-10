@@ -51,21 +51,41 @@ internal sealed partial class RecallPostingIndex
             }
             if (id is not null) Retain(best, id, bm25 ? score : score / terms.Count, limit);
         }
+        var items = ReadRankedDocuments(best, token);
+        var queryExecutions = (bm25 ? 3 : 1) + (best.Count == 0 ? 0 : 1);
+        return new(items, new(postingRows, 0, best.Count, queryExecutions, 4)
+        { Provider = "sqlite-postings-v1", RowCountMeaning = "native_build_rows_plus_matching_postings_excludes_sqlite_internal_metadata_reads" });
+    }
+
+    /// <summary>Reads the retained IDs in one bound statement, with deduplication still applied in provider rank order.</summary>
+    private List<MemoryLexicalRecallItem> ReadRankedDocuments(IReadOnlyList<(string Id, double Score)> best, CancellationToken token)
+    {
         var items = new List<MemoryLexicalRecallItem>(best.Count);
+        if (best.Count == 0) return items;
+
+        var values = string.Join(",", Enumerable.Range(0, best.Count).Select(index => $"($id{index},{index})"));
+        using var command = Command($"WITH ranked(id, position) AS (VALUES {values}) " +
+            "SELECT d.type,d.content,d.importance,d.confidence,d.updated,d.dedup,ranked.position " +
+            "FROM ranked JOIN documents d ON d.id=ranked.id ORDER BY ranked.position");
+        for (var index = 0; index < best.Count; index++)
+            Bind(command, "$id" + index, best[index].Id);
+
         var deduplicated = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var candidate in best)
+        using var reader = command.ExecuteReader();
+        var position = 0;
+        while (reader.Read())
         {
             token.ThrowIfCancellationRequested();
-            using var command = Command("SELECT type,content,importance,confidence,updated,dedup FROM documents WHERE id=$id");
-            Bind(command, "$id", candidate.Id);
-            using var reader = command.ExecuteReader(); reader.Read();
-            if (!deduplicated.Add(reader.GetString(5))) continue;
+            if (reader.GetInt32(6) != position) throw new IOException("A ranked recall document is missing from the derived index.");
+            var candidate = best[position++];
+            var deduplicationKey = reader.GetString(5);
+            if (!deduplicated.Add(deduplicationKey)) continue;
             items.Add(new(new(candidate.Id), Enum.Parse<MemoryRecordType>(reader.GetString(0)), reader.GetString(1),
                 reader.GetDouble(2), reader.GetDouble(3), DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture), candidate.Score)
-                { DeduplicationKey = reader.GetString(5) });
+                { DeduplicationKey = deduplicationKey });
         }
-        return new(items, new(postingRows, 0, best.Count, bm25 ? 3 : 1, 4)
-        { Provider = "sqlite-postings-v1", RowCountMeaning = "native_build_rows_plus_matching_postings_excludes_sqlite_internal_metadata_reads" });
+        if (position != best.Count) throw new IOException("A ranked recall document is missing from the derived index.");
+        return items;
     }
 
     /// <summary>Keeps score-descending, ordinal-ID order while retaining only the requested pre-dedup provider limit.</summary>

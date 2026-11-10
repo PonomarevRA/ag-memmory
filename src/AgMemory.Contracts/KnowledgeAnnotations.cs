@@ -18,6 +18,11 @@ public sealed record KnowledgeAnnotationState
     public long Version { get; init; }
     public Dictionary<string, KnowledgeClaim> Claims { get; init; } = new(StringComparer.Ordinal);
     public Dictionary<string, KnowledgeProcedureFacets> ProcedureFacets { get; init; } = new(StringComparer.Ordinal);
+
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, TemporaryNote>? TemporaryNotes { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? TemporaryNoteGeneration { get; init; }
 }
 
 public interface IKnowledgeAnnotationStore

@@ -79,6 +79,14 @@ public sealed class KnowledgeMemoryTools(LocalAgMemoryMcpRuntime memory)
         CancellationToken cancellationToken = default) => JsonSerializer.Serialize(
             await memory.TaskContextAsync(taskKey, query, budget, mode, cancellationToken).ConfigureAwait(false));
 
+    /// <summary>Exposes compact task context with optional client-generated lexical facets.</summary>
+    [McpServerTool(Name = "task_context_compact", ReadOnly = true, OpenWorld = false)]
+    [Description("Read task L2 and current sources with at most maxCards whole records (default 3; 1–10). For cross-language or compound tasks, generate up to 3 distinct focused queryFacets, each at most 160 characters, from the task and pass them with the original query. The server searches within the same authority and alternates candidates across facets. Omit facets for direct queries.")]
+    public async Task<string> TaskContextCompactAsync(string taskKey, string query = "", int budget = 2048,
+        string mode = "working", int maxCards = 3, string[]? queryFacets = null,
+        CancellationToken cancellationToken = default) => JsonSerializer.Serialize(
+            await memory.TaskContextCompactAsync(taskKey, query, budget, mode, maxCards, queryFacets, cancellationToken).ConfigureAwait(false));
+
     [McpServerTool(Name = "task_working_update", Idempotent = true, OpenWorld = false)]
     [Description("CAS-update named task L2 for 24h. Read task_context.WorkingSetRevision first; keep requestKey on retry. Separate from legacy shared L2. Maximum128 task partitions per store; labels confer no authorization or private-agent identity.")]
     public async Task<string> TaskWorkingAsync(string taskKey, string goal, string[] facts, string[] assumptions,

@@ -49,8 +49,9 @@ public sealed class McpUsageAuditTransportTests
                     "knowledge_capabilities", "memory_application", "memory_capabilities", "memory_claim", "memory_claims", "memory_context", "memory_correct",
                     "memory_decision", "memory_evidence", "memory_feedback", "memory_handoff", "memory_metadata", "memory_occurrence",
                     "memory_occurrence_update", "memory_present", "memory_procedure", "memory_procedure_discovery", "memory_procedure_facets", "memory_procedures", "memory_recall",
-                    "memory_remember", "memory_resolve", "memory_review", "memory_skill", "memory_status", "memory_warm_exclude",
-                    "task_context", "task_working_update", "working_context", "working_update"
+                    "memory_remember", "memory_resolve", "memory_review", "memory_shared_procedure_discovery", "memory_shared_procedure_publish", "memory_skill", "memory_status",
+                    "memory_temporary_note_create", "memory_temporary_note_read", "memory_temporary_notes", "memory_warm_exclude",
+                    "task_context", "task_context_compact", "task_working_update", "working_context", "working_update"
                 ];
                 Assert.Equal(expectedTools, tools.Select(tool => tool.Name).Order().ToArray());
                 Assert.All(tools, tool =>

@@ -122,3 +122,18 @@ body{min-width:0}.ag-app{min-width:0}
 @media(max-width:62rem) {
   html:not(.native-sidebar-layout) .app-shell { grid-template-columns:minmax(0,1fr); }
 }
+
+/* Knowledge search and evidence are one reading flow; the card grid reflows by available width. */
+.knowledge-catalog { display:grid; gap:var(--space-4, 16px); margin-block:var(--space-6, 24px); min-inline-size:0; }
+.knowledge-catalog [hidden] { display:none; }
+.knowledge-catalog .ag-catalog-search { min-inline-size:0; }
+.knowledge-catalog [data-knowledge-group] { min-inline-size:0; }
+.knowledge-catalog h2 { margin-block:0 var(--space-3, 12px); }
+.knowledge-procedure summary { cursor:pointer; line-height:1.5; overflow-wrap:anywhere; min-block-size:24px; }
+.knowledge-procedure summary span { display:block; font-size:.875rem; }
+.knowledge-page :is(.knowledge-observations,.memory-layers) { margin-block:var(--space-4, 16px); }
+.knowledge-page :is(.knowledge-observations,.memory-layers) > summary { cursor:pointer; min-block-size:24px; }
+
+.knowledge-card-slot { min-inline-size:0; }
+.knowledge-card-slot > .ui-card { block-size:100%; }
+.knowledge-page .feature-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr)); }

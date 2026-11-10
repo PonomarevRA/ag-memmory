@@ -132,6 +132,7 @@ public sealed partial class LanceDbMemoryStore
         if (previous is not null && !IsReadyCatalogGeneration(previous))
             await DeleteCatalogBuildRunRowsAsync(previous.GenerationKey, cancellationToken).ConfigureAwait(false);
 
+        // A failed build is never resumed. Fresh generation keys make the immutable child batches append-only.
         var now = DateTimeOffset.UtcNow;
         var generation = new PersistedReaderCatalogGenerationRow(
             ScopeKey(scope), NewRouteKey(), "Building", Utc(now), null) { SourceEpoch = ReadSourceEpoch() };
@@ -361,11 +362,8 @@ public sealed partial class LanceDbMemoryStore
     {
         if (leaves.Count == 0) return;
         using var table = await OpenTableAsync(ReaderCatalogLeavesTable, cancellationToken).ConfigureAwait(false);
-        await table.MergeInsert("leaf_key")
-            .WhenMatchedUpdateAll()
-            .WhenNotMatchedInsertAll()
-            .Execute(BuildReaderCatalogLeafBatch(leaves))
-            .ConfigureAwait(false);
+        using var batch = BuildReaderCatalogLeafBatch(leaves);
+        await table.Add(batch).ConfigureAwait(false);
     }
 
     private static readonly Regex WikiDocumentLink = new(@"\[\[(?<kind>doc|related):(?<path>[a-z0-9-]+(?:/[a-z0-9-]+)*)\|(?<label>[^\]\r\n]{1,160})\]\]", RegexOptions.CultureInvariant);
@@ -449,13 +447,16 @@ public sealed partial class LanceDbMemoryStore
             }
         }
 
-        var relationRows = relations.Rows().ToArray();
-        foreach (var batch in relationRows.Chunk(PersistenceBatchRows))
+        // Persist projected rows in batches; only child links are needed to assemble the tree.
+        var childRelations = new List<PersistedReaderWikiRelationRow>();
+        foreach (var batch in relations.Rows().Chunk(PersistenceBatchRows))
         {
+            foreach (var relation in batch)
+                if (relation.Kind == nameof(MemoryWikiRelationKind.Child)) childRelations.Add(relation);
             await PersistWikiRelationsAsync(batch, cancellationToken).ConfigureAwait(false);
             await YieldCatalogBuildLeaseAsync(generation, cancellationToken).ConfigureAwait(false);
         }
-        await BuildWikiTreeIndexCoreAsync(generation, documentsByMemoryId, typesByMemoryId, relationRows, cancellationToken).ConfigureAwait(false);
+        await BuildWikiTreeIndexCoreAsync(generation, documentsByMemoryId, typesByMemoryId, childRelations, cancellationToken).ConfigureAwait(false);
         await PersistCompiledFacetsCoreAsync(scope, generation.GenerationKey, eligibility, validUntil, facets, cancellationToken).ConfigureAwait(false);
     }
 
@@ -640,14 +641,16 @@ public sealed partial class LanceDbMemoryStore
     {
         if (rows.Count == 0) return;
         using var table = await OpenTableAsync(ReaderWikiDocumentsTable, cancellationToken).ConfigureAwait(false);
-        await table.MergeInsert("document_key").WhenMatchedUpdateAll().WhenNotMatchedInsertAll().Execute(BuildReaderWikiDocumentBatch(rows)).ConfigureAwait(false);
+        using var batch = BuildReaderWikiDocumentBatch(rows);
+        await table.Add(batch).ConfigureAwait(false);
     }
 
     private async Task PersistWikiRelationsAsync(IReadOnlyCollection<PersistedReaderWikiRelationRow> rows, CancellationToken cancellationToken)
     {
         if (rows.Count == 0) return;
         using var table = await OpenTableAsync(ReaderWikiRelationsTable, cancellationToken).ConfigureAwait(false);
-        await table.MergeInsert("relation_key").WhenMatchedUpdateAll().WhenNotMatchedInsertAll().Execute(BuildReaderWikiRelationBatch(rows)).ConfigureAwait(false);
+        using var batch = BuildReaderWikiRelationBatch(rows);
+        await table.Add(batch).ConfigureAwait(false);
     }
 
     private async Task PersistCatalogBuildRunRowsAsync(
@@ -656,11 +659,8 @@ public sealed partial class LanceDbMemoryStore
     {
         if (rows.Count == 0) return;
         using var table = await OpenTableAsync(ReaderCatalogBuildRunsTable, cancellationToken).ConfigureAwait(false);
-        await table.MergeInsert("row_key")
-            .WhenMatchedUpdateAll()
-            .WhenNotMatchedInsertAll()
-            .Execute(BuildReaderCatalogBuildRunBatch(rows))
-            .ConfigureAwait(false);
+        using var batch = BuildReaderCatalogBuildRunBatch(rows);
+        await table.Add(batch).ConfigureAwait(false);
     }
 
     private async Task DeleteCatalogBuildRunRowsAsync(string generationKey, CancellationToken cancellationToken)

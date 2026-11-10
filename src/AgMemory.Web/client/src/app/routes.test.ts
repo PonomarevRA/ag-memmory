@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { matchRoute } from './routes.js';
+import { canonicalMemoryPath, matchRoute } from './routes.js';
 import { shell } from './shell.js';
 
 describe('SPA routes and shell', () => {
-  it('recognizes deep reader and chat routes', () => {
+  it('recognizes deep reader routes and retires old chat addresses', () => {
     expect(matchRoute('/memory-reader/opaque-card').name).toBe('reader');
     expect(matchRoute('/chat/invalid').name).toBe('not-found');
-    expect(matchRoute(`/chat/${'a'.repeat(32)}`).params.id).toBe('a'.repeat(32));
+    expect(canonicalMemoryPath(`/chat/${'a'.repeat(32)}?thread=old`)).toBe('/memory-reader');
+    expect(canonicalMemoryPath('/chat')).toBe('/memory-reader');
   });
 
   it('renders main, skip link and active navigation', () => {
@@ -43,13 +44,13 @@ describe('native sidebar capability', () => {
     window.dispatchEvent(new Event('agmemory:toggle-sidebar'));
     expect(document.documentElement.classList.contains('sidebar-collapsed')).toBe(false);
     document.documentElement.classList.add('native-toolbar-ready');
-    document.body.innerHTML = shell('<h1>Chat</h1>', '/chat');
+    document.body.innerHTML = shell('<h1>Memory</h1>', '/memory-reader');
     await Promise.resolve();
     window.dispatchEvent(new Event('agmemory:toggle-sidebar'));
     expect(document.documentElement.classList.contains('sidebar-collapsed')).toBe(true);
     const link = document.querySelector('a[aria-current="page"]');
-    expect(link?.getAttribute('aria-label')).toBe('Чат');
-    expect(link?.getAttribute('title')).toBe('Чат');
+    expect(link?.getAttribute('aria-label')).toBe('Читать память');
+    expect(link?.getAttribute('title')).toBe('Читать память');
     expect(link?.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
     document.body.innerHTML = shell('<h1>Home</h1>', '/');
     await Promise.resolve();
@@ -117,7 +118,7 @@ it('browser sidebar toggle updates its accessible state and preserves active lin
   expect(control.getAttribute('aria-expanded')).toBe('false');
   expect(control.getAttribute('aria-label')).toBe('Развернуть меню');
   expect(document.activeElement).toBe(control);
-  expect(document.querySelector('[aria-current=page]')?.getAttribute('aria-label')).toBe('Знания и решения');
+  expect(document.querySelector('[aria-current=page]')?.getAttribute('aria-label')).toBe('Знания и процедуры');
   document.body.innerHTML=shell('Again','/knowledge');await Promise.resolve();
   expect(document.documentElement.classList.contains('sidebar-collapsed')).toBe(true);
   localStorage.removeItem('agmemory.sidebarCollapsed');document.documentElement.className='';

@@ -1,17 +1,16 @@
 import {pushRoute} from './route-history.js';
 import { beginRouteLoading, endRouteLoading, enhancePage, showRouteFailure } from './design-system.js';
 import { mountSettingsPage } from '../features/settings/page.js';
-import { matchRoute } from './routes.js';
+import { canonicalMemoryPath, matchRoute } from './routes.js';
 import { shell } from './shell.js';
 import { renderPage } from '../pages/index.js';
-import { mountChatPage } from '../features/chat/page.js';
-import { dispose as disposeChat } from '../features/chat/chat-stream.js';
+import { mountKnowledgePage } from '../features/knowledge/page.js';
 import { dispose as disposeMemoryReader, mountMemoryReaderPage } from '../features/memory-reader/page-controller.js';
 import { beginNavigation, trackVisit } from '../features/navigation/index.js';
 import { loadAppVersion } from '../features/app-version/api.js';
 
 let app: HTMLElement;
-let disposeChatPage: (() => void) | undefined;
+let disposeKnowledge: (() => void) | undefined;
 let renderEpoch = 0;
 let disposeSettings: (() => void) | undefined;
 let disposePageDesign: (() => void) | undefined;
@@ -30,22 +29,24 @@ export function startRouter(target: HTMLElement): void {
 }
 /** Start a new navigation at the page heading; history restoration remains owned by popstate rendering. */
 export function navigate(path: string): void {
-  beginNavigation(path);
-  pushRoute(path);
+  const destination = canonicalMemoryPath(path);
+  beginNavigation(destination);
+  pushRoute(destination);
   window.scrollTo({left:0, top:0, behavior:'instant'});
   void render();
 }
 /** Renders only the latest route so an older asynchronous response cannot replace it. */
 export async function render(): Promise<void> {
   const epoch = ++renderEpoch;
-  // Render replaces the route subtree. Release canvas and stream resources first.
+  // Release controllers before replacing the route subtree.
   graphPage?.disposeMemoryGraph();
-  disposeChatPage?.();
-  disposeChatPage = undefined;
-  disposeChat();
+  disposeKnowledge?.();
+  disposeKnowledge = undefined;
   disposeMemoryReader();
   disposeSettings?.();
   disposeSettings = undefined;
+  const canonical = canonicalMemoryPath(location.pathname);
+  if (canonical !== location.pathname) history.replaceState(history.state, '', canonical);
   const route = matchRoute(); document.title = route.title;
   beginRouteLoading(app);
   try {
@@ -63,7 +64,7 @@ export async function render(): Promise<void> {
     app.innerHTML = shell(markup, route.path, version);
     disposePageDesign = enhancePage(app);
     if (route.name === 'graph') graphPage?.mountMemoryGraphPage();
-    if (route.name === 'chat') disposeChatPage = mountChatPage(app);
+    if (route.name === 'knowledge') disposeKnowledge = mountKnowledgePage(app);
     if (route.name === 'settings') disposeSettings = mountSettingsPage(app);
     if (route.name === 'reader') void mountMemoryReaderPage(route.params.id);
     app.querySelector<HTMLElement>('main')?.focus({preventScroll:true});

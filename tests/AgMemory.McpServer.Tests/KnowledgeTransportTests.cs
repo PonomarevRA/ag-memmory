@@ -72,6 +72,34 @@ public sealed class KnowledgeTransportTests
             Assert.Equal("Task wire goal", taskContext.GetProperty("Data").GetProperty("WorkingSet").GetProperty("Goal").GetString());
             var otherTask = await Call("task_context", new() { ["taskKey"] = "wire-other" });
             Assert.Equal(JsonValueKind.Null, otherTask.GetProperty("Data").GetProperty("WorkingSet").ValueKind);
+            var compact = await Call("task_context_compact", new()
+            {
+                ["taskKey"] = "wire-task", ["query"] = "wire fixture",
+                ["queryFacets"] = new[] { "focused fixture" }, ["maxCards"] = 3
+            });
+            Assert.Equal(1, compact.GetProperty("Data").GetProperty("WorkingSetRevision").GetInt64());
+            var tooMany = await Call("task_context_compact", new()
+            {
+                ["taskKey"] = "wire-task", ["query"] = "wire fixture",
+                ["queryFacets"] = new[] { "first", "second", "third", "fourth" }
+            });
+            Assert.Equal("invalid_argument", tooMany.GetProperty("Error").GetProperty("Code").GetString());
+
+            var note = await Call("memory_temporary_note_create", new()
+            {
+                ["title"] = "Wire note", ["content"] = "Fixture body", ["requestKey"] = "wire_note",
+                ["conversationId"] = "chat-one"
+            });
+            var noteId = note.GetProperty("Data").GetProperty("NoteId").GetString();
+            var listed = await Call("memory_temporary_notes", new());
+            var entry = Assert.Single(listed.GetProperty("Data").EnumerateArray());
+            Assert.False(entry.TryGetProperty("Content", out _));
+            Assert.Empty(entry.GetProperty("Deliveries").EnumerateArray());
+            var delivered = await Call("memory_temporary_note_read", new() { ["noteId"] = noteId, ["conversationId"] = "chat-two" });
+            var read = delivered.GetProperty("Data");
+            Assert.Equal("Fixture body", read.GetProperty("Content").GetString());
+            var delivery = Assert.Single(read.GetProperty("Note").GetProperty("Deliveries").EnumerateArray());
+            Assert.Equal("chat-two", delivery.GetProperty("Recipient").GetProperty("ConversationId").GetString());
 
             // Exercise the public JSON schemas and serializer rather than only direct runtime signatures.
             async Task<JsonElement> Call(string name, Dictionary<string, object?> arguments)

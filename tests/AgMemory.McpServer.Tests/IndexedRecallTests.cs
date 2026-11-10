@@ -42,6 +42,36 @@ public sealed class IndexedRecallTests : IDisposable
         Assert.Equal((await store.SearchRecallCandidatesAsync(eligibility, "rare", 64, bm25, default)).Items, rebuilt.Items);
     }
 
+    /// <summary>Warm recall fetches all retained documents in one statement without changing rank or the pre-dedup cutoff.</summary>
+    [Theory]
+    [InlineData(false, 3)]
+    [InlineData(true, 5)]
+    public async Task WarmIndexedRecallBatchesRankedDocuments(bool bm25, int expectedQueries)
+    {
+        await using var store = new LanceDbMemoryStore(new(_path));
+        var scope = new AuthorizedScopeSet([new ScopeSelector(Config.Scope)]);
+        var eligibility = new MemorySearchEligibility(scope, null, _now);
+        var records = new List<MemoryRecord>();
+        for (var index = 0; index < 70; index++)
+        {
+            var record = Record($"candidate-{index:D2}", "broad candidate");
+            records.Add(index < 2 ? record with { DeduplicationKey = "shared" } : record);
+        }
+        await WriteAsync(store, records);
+        await store.SearchIndexedRecallCandidatesAsync(eligibility, "broad", 64, bm25, default);
+
+        var warm = await store.SearchIndexedRecallCandidatesAsync(eligibility, "broad", 64, bm25, default);
+        var scan = await store.SearchRecallCandidatesAsync(eligibility, "broad", 64, bm25, default);
+        Assert.Equal("sqlite-postings-v1", warm.Work.Provider);
+        Assert.False(warm.Work.IndexRebuilt);
+        Assert.Equal(expectedQueries, warm.Work.QueryExecutions);
+        Assert.Equal(scan.Items, warm.Items);
+
+        var miss = await store.SearchIndexedRecallCandidatesAsync(eligibility, "missing", 64, bm25, default);
+        Assert.Empty(miss.Items);
+        Assert.Equal(expectedQueries - 2, miss.Work.QueryExecutions);
+    }
+
     /// <summary>Alias channels deduplicate logical keys even when their record IDs differ; long legacy queries keep working.</summary>
     [Fact]
     public async Task FusionPreservesDedupAndLegacyLongQuery()

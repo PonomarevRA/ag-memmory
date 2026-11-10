@@ -11,10 +11,8 @@ using AgMemory.Web.Features.MemoryExperience;
 using AgMemory.Web.Features.MemoryReader;
 using AgMemory.Web.Features.MemoryStatus;
 using AgMemory.Web.Features.Knowledge;
-using AgMemory.Web.Gateway;
 using AgMemory.Web.Hosting;
 using Microsoft.AspNetCore.DataProtection;
-using System.Threading.RateLimiting;
 
 if (LocalBackupCommand.IsCommand(args))
 {
@@ -42,27 +40,8 @@ builder.AddTechnicalLogs(applicationDataDirectory);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(applicationDataDirectory, "data-protection")));
 builder.Services.AddAntiforgery();
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy(ChatEndpoint.RateLimitPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions
-        {
-            PermitLimit = 12,
-            Window = TimeSpan.FromMinutes(1),
-            QueueLimit = 0,
-            AutoReplenishment = true
-        }));
-});
-builder.Services.Configure<ModelGatewayOptions>(builder.Configuration.GetSection(ModelGatewayOptions.SectionName));
-// These switches are server-only: nothing in the SPA configuration may expose them.
+// These switches are server-only.
 builder.Services.Configure<MemoryExperienceOptions>(builder.Configuration.GetSection(MemoryExperienceOptions.SectionName));
-builder.Services.AddHttpClient(OpenAiCompatibleChatGateway.HttpClientName, client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(45);
-});
-builder.Services.AddSingleton<IModelChatGateway, OpenAiCompatibleChatGateway>();
 var memoryGraphOptions = builder.Configuration.GetSection(MemoryGraphHostOptions.SectionName).Get<MemoryGraphHostOptions>() ?? new();
 var memoryReaderOptions = builder.Configuration.GetSection(MemoryReaderHostOptions.SectionName).Get<MemoryReaderHostOptions>() ?? new();
 builder.Services.AddSingleton(new LocalKnowledgeFeature(memoryGraphOptions, applicationDataDirectory));
@@ -70,8 +49,6 @@ builder.Services.AddSingleton<LocalMemoryGraphFeature>(services => new(memoryGra
     services.GetRequiredService<IDataProtectionProvider>()));
 builder.Services.AddSingleton(services => new ChatMemorySourceLinks(memoryReaderOptions, applicationDataDirectory,
     services.GetRequiredService<IDataProtectionProvider>()));
-builder.Services.AddSingleton(services => new LocalChatMemoryFeature(memoryGraphOptions, applicationDataDirectory,
-    services.GetRequiredService<ChatMemorySourceLinks>()));
 builder.Services.AddSingleton<LocalMemoryReaderFeature>(services => new(
     memoryReaderOptions,
     applicationDataDirectory,
@@ -103,7 +80,6 @@ if (!desktopHost.IsEnabled)
 
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
 app.UseAntiforgery();
-app.UseRateLimiter();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -112,8 +88,7 @@ DesktopWidgetEndpoint.Map(app);
 app.MapGet(AntiforgeryEndpoint.Route, AntiforgeryEndpoint.HandleAsync);
 app.MapGet(AppVersionEndpoint.Route, AppVersionEndpoint.Handle);
 app.MapGet(ChatMemorySourceLinks.Route, ChatMemorySourceLinks.HandleAsync);
-app.MapPost(ChatEndpoint.Route, ChatEndpoint.HandleAsync)
-    .RequireRateLimiting(ChatEndpoint.RateLimitPolicy);
+app.MapGet("/chat/{**retired}", () => Results.Redirect("/memory-reader"));
 app.MapGet(MemoryGraphEndpoint.Route, (HttpContext context, string? continuation, string? area, IHostEnvironment environment,
     LocalMemoryGraphFeature feature, LocalMemoryReaderFeature reader, CancellationToken cancellationToken) =>
     MemoryGraphEndpoint.HandleAsync(context, environment, feature, cancellationToken, continuation, reader, area));

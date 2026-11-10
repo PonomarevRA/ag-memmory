@@ -14,7 +14,7 @@ public sealed record MemoryLexicalRecallItem(
     public string? DeduplicationKey { get; init; }
 }
 
-/// <summary>Measured projected scan work (one legacy pass or two BM25 passes); diagnostics stay outside MCP responses.</summary>
+/// <summary>Measured query work, including bounded indexed document retrieval; diagnostics stay outside MCP responses.</summary>
 public sealed record MemoryLexicalRecallWork(long RowsScanned, int MaximumBatchRows, int PeakCandidates, int QueryExecutions, int SelectedColumnCount)
 {
     public string Provider { get; init; } = "streaming-scan";

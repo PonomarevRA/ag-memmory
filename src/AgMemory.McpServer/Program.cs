@@ -21,6 +21,8 @@ builder.Services
     .WithTools<AgentMemoryTools>()
     .WithTools<AgentSkillTools>()
     .WithTools<KnowledgeMemoryTools>()
-    .WithTools<ClaimMemoryTools>();
+    .WithTools<ClaimMemoryTools>()
+    .WithTools<SharedProcedureMemoryTools>()
+    .WithTools<TemporaryNoteMemoryTools>();
 
 await builder.Build().RunAsync();

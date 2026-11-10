@@ -448,7 +448,7 @@ final class DesktopDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, 
         let file = group("File")
         command(file, "Home", #selector(home), "1", [.command], self)
         command(file, "Open Memory", #selector(memory), "o", [.command], self)
-        command(file, "Chat", #selector(chat), "n", [.command], self); file.addItem(.separator())
+        file.addItem(.separator())
         command(file, "Print…", #selector(printPage), "p", [.command], self)
         command(file, "Close Window", #selector(NSWindow.performClose(_:)), "w", [.command], window)
         let edit = group("Edit")
@@ -558,7 +558,6 @@ final class DesktopDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, 
     @objc private func settings() { navigate("/settings") }
     @objc private func home() { navigate("/") }
     @objc private func memory() { navigate("/memory-reader") }
-    @objc private func chat() { navigate("/chat") }
     @objc private func helpPage() { navigate("/about") }
     @objc private func connect() { navigate("/connect") }
     @objc private func back() { window?.webView.goBack() }

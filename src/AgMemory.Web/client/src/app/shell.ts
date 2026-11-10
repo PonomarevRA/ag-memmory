@@ -4,7 +4,7 @@ import { escapeHtml } from '../shared/html.js';
 import type { AppVersion } from '../features/app-version/api.js';
 
 // The project has no icon package. Local SVG paths keep collapsed links legible without font-dependent glyphs.
-const navigationIcons = ['M3 10 12 3l9 7v11H3z M9 21v-8h6v8', 'M4 4h16v12H9l-5 5z', 'M4 3h16v18H4z M8 7h8 M8 11h8 M8 15h5', 'M12 3 3 9l9 12 9-12z M3 9h18 M12 3v18', 'M4 3h16v18H4z M8 7h8 M8 11h8 M8 15h8', 'M3 12h4l3-7 4 14 3-7h4', 'M8 3H3v18h18v-5 M10 14 21 3 M14 3h7v7', 'M12 8v1 M12 12v5 M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18'];
+const navigationIcons = ['M3 10 12 3l9 7v11H3z M9 21v-8h6v8', 'M4 3h16v18H4z M8 7h8 M8 11h8 M8 15h5', 'M12 3 3 9l9 12 9-12z M3 9h18 M12 3v18', 'M4 3h16v18H4z M8 7h8 M8 11h8 M8 15h8', 'M3 12h4l3-7 4 14 3-7h4', 'M8 3H3v18h18v-5 M10 14 21 3 M14 3h7v7', 'M12 8v1 M12 12v5 M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18'];
 const settingsIcon = 'M12 3v4 M12 17v4 M3 12h4 M17 12h4 M6 6l3 3 M15 15l3 3 M6 18l3-3 M15 9l3-3 M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8';
 
 /** Emits one decorative local icon; link labels and titles supply its accessible meaning. */
@@ -14,7 +14,7 @@ function navigationIcon(path: string): string {
 let nativeSidebarInstalled = false;
 let disposeWindowShell: (() => void) | undefined;
 
-const links = [['/', 'Главная'], ['/chat', 'Чат'], ['/memory-reader', 'Читать память'], ['/memory-graph', 'Граф памяти'], ['/knowledge', 'Знания и решения'], ['/memory-status', 'Состояние'], ['/connect', 'Подключить'], ['/about', 'О проекте']];
+const links = [['/', 'Главная'], ['/memory-reader', 'Читать память'], ['/memory-graph', 'Граф памяти'], ['/knowledge', 'Знания и процедуры'], ['/memory-status', 'Состояние'], ['/connect', 'Подключить'], ['/about', 'О проекте']];
 
 /** Keep navigation separate from the contextual header in both shells; narrow browsers use the existing drawer. */
 export function shell(content: string, path: string, version: AppVersion | null = null): string {

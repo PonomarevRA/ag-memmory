@@ -10,7 +10,7 @@ describe('informational pages', () => {
     expect(document.body.textContent).toContain('Локальная память для агентов');
     expect(document.body.textContent).toContain('не является моделью производственной авторизации');
     expect(document.body.textContent).toContain('безопасные проекции');
-    expect(document.body.textContent).toContain('Wiki может показать безопасную проекцию записи');
+    expect(document.body.textContent).toContain('Обозреватель, граф и каталог знаний');
   });
 
   it('documents the process-fixed MCP flow without exposing configuration', async () => {
@@ -34,10 +34,10 @@ describe('informational pages', () => {
 });
 
 
-it('home starts with reading real memory and exposes four clearly named destinations',async()=>{
+it('home starts with reading real memory and exposes three clearly named destinations',async()=>{
   document.body.innerHTML=await renderPage(route('home'));
   expect(document.querySelector('.hero .ui-button')?.getAttribute('href')).toBe('/memory-reader');
   expect(document.querySelector('.feature-grid')?.closest('section')?.getAttribute('aria-labelledby')).toBe('workspace-heading');
-  expect(document.querySelectorAll('.home-features .feature-card')).toHaveLength(4);
+  expect(document.querySelectorAll('.home-features .feature-card')).toHaveLength(3);
   expect(document.querySelector('.feature-card a[href="/knowledge"]')).not.toBeNull();
 });

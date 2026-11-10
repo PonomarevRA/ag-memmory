@@ -2,7 +2,9 @@
 
 [Русский](README.md) · English · [Install with an agent](INSTALL-AGENT.md#english)
 
-AgMemory is local long-term memory for AI agents. Save facts, outcomes and procedures, retrieve them through MCP, and explore them in a browser as a wiki or a graph. Storage and retrieval run locally without a model or API key. A model is optional for chat.
+AgMemory is local long-term memory for AI agents. Save facts, outcomes and procedures, retrieve them through MCP, and explore them in a browser as a wiki or a graph. Storage and retrieval run locally without a model or API key.
+
+Search loaded cards in the knowledge catalogue and open a procedure to see its steps. Agents in different projects that use the same local store and tenant can publish and discover shared solutions through their regular MCP connections. [How the shared library works](docs/knowledge-retrieval-and-lifecycle.md#shared-procedure-library-across-projects).
 
 ## Quick start
 

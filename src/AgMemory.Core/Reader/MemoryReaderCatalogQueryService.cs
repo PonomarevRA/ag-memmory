@@ -39,8 +39,10 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
 
         try
         {
-            // This leaf anchors all facet counts to one immutable generation before anything is disclosed.
-            var firstLeaf = await _catalog.ReadReadyLeafPageAsync(eligibility, null, cancellationToken).ConfigureAwait(false);
+            var compiledFacets = _catalog as IMemoryReaderCatalogFacetSource;
+            // Compiled counts need only a generation anchor, so the requested leaf can anchor and supply the page.
+            var anchorCursor = compiledFacets is null ? null : request.Cursor;
+            var firstLeaf = await _catalog.ReadReadyLeafPageAsync(eligibility, anchorCursor, cancellationToken).ConfigureAwait(false);
             if (firstLeaf is null)
                 return Result(request.Cursor is null ? MemoryReaderCatalogState.CatalogNotReady : MemoryReaderCatalogState.Changed,
                     [], [], [], null, request.ContractVersion);
@@ -50,7 +52,7 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
             // Reuse descriptions only for the bounded page scan; nothing survives authorization or this request.
             var descriptions = new Dictionary<int, WikiDocument?>();
             FacetSet? facets;
-            if (_catalog is IMemoryReaderCatalogFacetSource compiledFacets)
+            if (compiledFacets is not null)
             {
                 var snapshot = await compiledFacets.ReadReadyFacetsAsync(eligibility, firstLeaf.GenerationKey, cancellationToken).ConfigureAwait(false);
                 facets = snapshot is null || !string.Equals(snapshot.GenerationKey, firstLeaf.GenerationKey, StringComparison.Ordinal)
@@ -68,8 +70,10 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
             MemoryReaderCatalogCursor? next = null;
             for (var scan = 0; scan < MemoryReaderLimits.MaximumCatalogLeafScansPerPage && documents.Count < MemoryReaderLimits.DocumentsPerPage; scan++)
             {
-                // Reanchor after metadata reads: a concurrent mutation may have invalidated even a one-page generation.
-                var leaves = await _catalog.ReadReadyLeafPageAsync(eligibility, cursor, cancellationToken).ConfigureAwait(false);
+                // Only the compiled path has a final generation check after reading card metadata.
+                var leaves = scan == 0 && compiledFacets is not null
+                    ? firstLeaf
+                    : await _catalog.ReadReadyLeafPageAsync(eligibility, cursor, cancellationToken).ConfigureAwait(false);
                 if (leaves is null || !string.Equals(leaves.GenerationKey, firstLeaf.GenerationKey, StringComparison.Ordinal))
                     return Result(MemoryReaderCatalogState.Changed, [], [], [], null, request.ContractVersion);
 
@@ -97,9 +101,9 @@ public sealed class MemoryReaderCatalogQueryService : IMemoryReaderCatalogQueryS
                 cursor = next;
             }
             // Compiled facets avoid metadata traversal, so card metadata awaits need their own final generation check.
-            if (_catalog is IMemoryReaderCatalogFacetSource compiled)
+            if (compiledFacets is not null)
             {
-                var current = await compiled.ReadReadyFacetsAsync(eligibility, firstLeaf.GenerationKey, cancellationToken).ConfigureAwait(false);
+                var current = await compiledFacets.ReadReadyFacetsAsync(eligibility, firstLeaf.GenerationKey, cancellationToken).ConfigureAwait(false);
                 if (current is null || !string.Equals(current.GenerationKey, firstLeaf.GenerationKey, StringComparison.Ordinal))
                     return Result(MemoryReaderCatalogState.Changed, [], [], [], null, request.ContractVersion);
             }

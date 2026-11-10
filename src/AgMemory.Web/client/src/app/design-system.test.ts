@@ -83,7 +83,7 @@ it('cycles drawer focus and restores its trigger on Escape', async () => {
   expect(document.activeElement).toBe(close);
 
   close.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
-  expect(document.activeElement).toBe(nav.querySelectorAll('a')[7]);
+  expect(document.activeElement).toBe(nav.querySelector('a:last-of-type[href="/about"]'));
   document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
   expect(document.activeElement).toBe(close);
   close.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
